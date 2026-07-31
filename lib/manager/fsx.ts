@@ -22,8 +22,8 @@ export async function isDirectory(p: string): Promise<boolean> {
 }
 
 /**
- * manager.py's `read_json` — unlike `@/lib/json`'s forgiving `readJson`, this
- * throws, because several endpoints report the parse error back to the client.
+ * Unlike `@/lib/json`'s forgiving `readJson`, this throws, because several
+ * endpoints report the parse error back to the client.
  */
 export async function readJsonStrict<T = unknown>(file: string): Promise<T> {
   return JSON.parse(await fs.readFile(file, 'utf8')) as T
@@ -69,9 +69,8 @@ export async function moveInto(src: string, dest: string): Promise<void> {
 }
 
 /**
- * All files below `dir` as POSIX-style relative paths, sorted — mirrors
- * `sorted(folder.rglob("*"))` filtered to `is_file()`. Directories with no
- * files in them are dropped, exactly as the Python did.
+ * All files below `dir` as POSIX-style relative paths, sorted. Directories
+ * with no files in them are dropped.
  */
 export async function listFilesRecursive(dir: string): Promise<string[]> {
   const out: string[] = []
@@ -110,7 +109,7 @@ export async function sortedDirNames(dir: string): Promise<string[]> {
   }
 }
 
-/** Python's `round(x, 3)` (close enough — ties round half-away-from-zero here). */
+/** Round to 3 decimal places — the precision durations are stored at. */
 export function round3(n: number): number {
   return Math.round(n * 1000) / 1000
 }

@@ -3,10 +3,9 @@
 import { useRef, useState } from 'react'
 
 /**
- * Mirrors what `setDropZoneEmpty()` / `setDropZoneFilled()` did to the DOM in
- * manager.html.  `hintVisible` is tracked separately from `hasFile` because
- * edit mode re-shows the hint ("Drop a new file to replace…") on a filled zone,
- * and — as in the original — `hintText` survives a later clear.
+ * `hintVisible` is tracked separately from `hasFile` because edit mode re-shows
+ * the hint ("Drop a new file to replace…") on a filled zone, and `hintText`
+ * deliberately survives a later clear.
  */
 export type ZoneState = {
   hasFile: boolean

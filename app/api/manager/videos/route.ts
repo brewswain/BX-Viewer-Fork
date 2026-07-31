@@ -6,7 +6,6 @@ import { listVideos } from '@/lib/manager/meta'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/** manager.py `api_videos`. */
 export async function GET() {
   return guard(async () => {
     if (!(await manifestExists('videos'))) {

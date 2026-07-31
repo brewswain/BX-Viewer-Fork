@@ -1,5 +1,5 @@
 /**
- * Shared player constants — ported verbatim from app/player-core.js.
+ * Shared player constants.
  *
  * `VIDEO_BASE` / `PLAYLIST_BASE` are *client-side URL* prefixes (relative, no
  * leading slash) and are deliberately unrelated to the filesystem paths in

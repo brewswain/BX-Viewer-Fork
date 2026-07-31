@@ -6,7 +6,6 @@ import { isDirectory, listFilesRecursive } from './fsx'
 /**
  * Already-compressed payloads: deflating them burns CPU for ~0% gain, so they
  * go in with STORE. Everything else (meta.json, .bx path data, fonts) deflates.
- * Verbatim copy of manager.py's `_STORED_EXTS`.
  */
 export const STORED_EXTS = new Set([
   '.mp4',
@@ -45,13 +44,13 @@ async function addFolder(
  *
  * Nothing is buffered: entries are queued and archiver pulls each file off disk
  * as the client drains the response, so exporting 50 GB of video costs a few MB
- * of RSS. Missing folders are skipped silently, as in manager.py.
+ * of RSS. Missing folders are skipped silently.
  */
 export function buildExportArchive(videoIds: string[], playlistIds: string[]): archiver.Archiver {
   const archive = archiver('zip', { forceZip64: true })
 
-  // ENOENT on an individual file is a warning in archiver — it keeps going,
-  // matching the Python's tolerance for a package that lost a file.
+  // ENOENT on an individual file is a warning in archiver — it keeps going, so
+  // a package that lost a file still exports.
   archive.on('warning', (err) => {
     console.warn(`[export] ${err.message}`)
   })
@@ -90,10 +89,11 @@ export function buildExportArchive(videoIds: string[], playlistIds: string[]): a
   return archive
 }
 
-/** manager.py: `re.sub(r'[^\w\-. ]', '_', name.strip()) or "package"`, then `.zip`. */
+/** Reduce a client-supplied export name to `[letters, digits, _-. space]` + `.zip`. */
 export function sanitizeExportFilename(raw: unknown): string {
   const trimmed = (typeof raw === 'string' ? raw : 'package').trim()
-  // Python's `\w` is Unicode-aware, unlike JS's ASCII-only `\w`.
+  // Explicit Unicode classes — JS's `\w` is ASCII-only, which would mangle
+  // non-Latin titles into underscores.
   let name = trimmed.replace(/[^\p{L}\p{N}_\-. ]/gu, '_')
   if (!name) name = 'package'
   if (!name.endsWith('.zip')) name += '.zip'

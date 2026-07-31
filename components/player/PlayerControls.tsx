@@ -3,9 +3,8 @@
 import { memo, type ReactNode } from 'react'
 
 /**
- * JSX port of `buildControlsHTML()` from app/player-core.js — progress bar plus
- * the two control rows. Ids and class names are unchanged; the engine binds to
- * them by id.
+ * Progress bar plus the two control rows. The engine binds to these elements
+ * by id, so ids and class names here are part of its contract.
  *
  * `playIcon` / `volIcon` render their contents through
  * `dangerouslySetInnerHTML` on purpose: the engine swaps those SVG children by

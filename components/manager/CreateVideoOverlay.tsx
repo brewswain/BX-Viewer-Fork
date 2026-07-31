@@ -589,8 +589,8 @@ export default function CreateVideoOverlay({ api, showToast, reloadVideos }: Pro
         closeCreatePkg()
         const renamed = result.renamed ? ` (renamed to "${newFolderId}")` : ''
         // `editId` comes from the closure, so closeCreatePkg() nulling the state
-        // can't blank it — manager.html used a module-level var and read it back
-        // after the reset, which is why this toast always said `"null" saved.`
+        // can't blank it. Re-reading it from state after the reset would make
+        // this toast say `"null" saved.`
         showToast('success', 'Video updated', `"${editId}" saved${renamed}.`)
         await reloadVideos()
       } catch (e) {

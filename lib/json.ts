@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import fs from 'node:fs/promises'
 
 /**
- * manager.py's _send_json: permissive CORS (the manager used to live on a
- * second port) plus no-store so the browser never serves stale manifests.
+ * Permissive CORS — kept from when the manager lived on a second port — plus
+ * no-store so the browser never serves stale manifests.
  */
 export function jsonResponse(data: unknown, status = 200): NextResponse {
   return NextResponse.json(data, {
@@ -31,7 +31,7 @@ export async function readJson<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
-/** Write JSON with the same 2-space indent manager.py used. */
+/** Write JSON with a 2-space indent, matching the on-disk manifest/meta files. */
 export async function writeJson(file: string, data: unknown): Promise<void> {
   await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8')
 }

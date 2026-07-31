@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Single-video watch page — port of app/watch.html + app/player.js.
+ * Single-video watch page.
  *
  * React owns the markup; the canvas engine (`@/lib/player/engine`) stays
  * imperative and is created once per loaded video from an effect. Per-frame

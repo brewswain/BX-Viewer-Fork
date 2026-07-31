@@ -49,7 +49,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* â”€â”€ Scrollbar â”€â”€ */
+/* ── Scrollbar ── */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -61,7 +61,7 @@ body {
   border-radius: 3px;
 }
 
-/* â”€â”€ Header â”€â”€ */
+/* ── Header ── */
 .site-header {
   position: sticky;
   top: 0;
@@ -154,14 +154,14 @@ body {
   background: var(--surface);
 }
 
-/* â”€â”€ Main Layout â”€â”€ */
+/* ── Main Layout ── */
 .main-content {
   max-width: 1400px;
   margin: 0 auto;
   padding: 2.5rem 2rem;
 }
 
-/* â”€â”€ Section Headers â”€â”€ */
+/* ── Section Headers ── */
 .section-header {
   display: flex;
   align-items: baseline;
@@ -377,7 +377,7 @@ body {
   border-color: var(--border2);
 }
 
-/* â”€â”€ Video Grid â”€â”€ */
+/* ── Video Grid ── */
 .video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -531,7 +531,7 @@ body {
   color: var(--text2);
 }
 
-/* â”€â”€ Empty State â”€â”€ */
+/* ── Empty State ── */
 .empty-state {
   text-align: center;
   padding: 5rem 2rem;
@@ -540,7 +540,7 @@ body {
   font-size: 0.85rem;
 }
 
-/* â”€â”€ PLAYER PAGE â”€â”€ */
+/* ── PLAYER PAGE ── */
 .player-layout {
   display: grid;
   grid-template-columns: 1fr 340px;
@@ -559,7 +559,7 @@ body {
 .player-main {
 }
 
-/* â”€â”€ Player Container â”€â”€ */
+/* ── Player Container ── */
 .player-container {
   position: relative;
   background: #000;
@@ -701,7 +701,7 @@ body {
   }
 }
 
-/* â”€â”€ BounceX Canvas â”€â”€ */
+/* ── BounceX Canvas ── */
 .bouncex-wrap {
   width: 100%;
   position: relative;
@@ -724,7 +724,7 @@ body {
   display: block;
 }
 
-/* â”€â”€ Player Controls â”€â”€ */
+/* ── Player Controls ── */
 .player-controls {
   background: var(--bg2);
   border-top: 1px solid var(--border);
@@ -932,7 +932,7 @@ body {
   background: var(--accent-glow);
 }
 
-/* â”€â”€ Video Info â”€â”€ */
+/* ── Video Info ── */
 .video-info {
   margin-top: 1.5rem;
 }
@@ -1036,7 +1036,7 @@ body {
   background: var(--accent-glow);
 }
 
-/* â”€â”€ Sidebar â”€â”€ */
+/* ── Sidebar ── */
 .player-sidebar {
 }
 
@@ -1189,7 +1189,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-/* â”€â”€ BX Data Panel â”€â”€ */
+/* ── BX Data Panel ── */
 .bx-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1237,7 +1237,7 @@ body {
   color: var(--accent);
 }
 
-/* â”€â”€ Marker List â”€â”€ */
+/* ── Marker List ── */
 .marker-list {
   display: flex;
   flex-direction: column;
@@ -1313,7 +1313,7 @@ body {
   letter-spacing: 0.03em;
 }
 
-/* â”€â”€ Back button â”€â”€ */
+/* ── Back button ── */
 .back-btn {
   display: inline-flex;
   align-items: center;
@@ -1337,7 +1337,7 @@ body {
   height: 14px;
 }
 
-/* â”€â”€ Loading / Error â”€â”€ */
+/* ── Loading / Error ── */
 .loading-msg,
 .error-msg {
   text-align: center;
@@ -1353,7 +1353,7 @@ body {
   color: var(--red);
 }
 
-/* â”€â”€ Animations â”€â”€ */
+/* ── Animations ── */
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -1415,9 +1415,7 @@ body::after {
   cursor: pointer;
 }
 
-/* â”€â”€ Paste these at the bottom of your style.css â”€â”€ */
-
-/* â”€â”€ Page Tabs â”€â”€ */
+/* ── Page Tabs ── */
 .page-tabs {
   display: flex;
   gap: 0;
@@ -1454,13 +1452,13 @@ body::after {
   border-bottom-color: var(--accent);
 }
 
-/* â”€â”€ Active nav link â”€â”€ */
+/* ── Active nav link ── */
 .header-nav a.active {
   color: var(--text);
   background: var(--surface);
 }
 
-/* â”€â”€ Playlist Track List (sidebar) â”€â”€ */
+/* ── Playlist Track List (sidebar) ── */
 .playlist-track-list {
   display: flex;
   flex-direction: column;
@@ -1558,7 +1556,7 @@ body::after {
   flex-shrink: 0;
 }
 
-/* â”€â”€ About Page â”€â”€ */
+/* ── About Page ── */
 .about-layout {
   max-width: 900px;
   margin: 0 auto;
@@ -1632,6 +1630,16 @@ body::after {
   margin-top: 0.75rem;
 }
 
+/* Prose links only — `.about-link` buttons style themselves. */
+.about-card-body p a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.about-card-body p a:hover {
+  text-decoration: underline;
+}
+
 .about-links {
   display: flex;
   flex-wrap: wrap;
@@ -1672,7 +1680,7 @@ body::after {
   color: var(--text3);
 }
 
-/* â"€â"€ Settings Page â"€â"€ */
+/* ── Settings Page ── */
 .settings-layout {
   max-width: 700px;
   margin: 0 auto;
@@ -2378,11 +2386,10 @@ body.theater-mode .bouncex-wrap.overlay-mode {
 }
 
 /* ==========================================================================
-   Manager page  --  ported verbatim from the <style> block in app/manager.html
-   (appended during the Next.js migration; do not reorder or edit above this
-   line).  The only deviation from the original is the html/body rule, which
-   was global in the standalone page and is scoped to the manager here so it
-   cannot leak into the other App Router pages that share this stylesheet.
+   Manager page.  This block is appended last and relies on it: do not reorder
+   it or insert rules above this line.  The html/body rule is scoped via
+   `:has(.manager-layout)` so the manager's `overflow: hidden` cannot leak into
+   the other App Router pages that share this stylesheet.
    ========================================================================== */
 
 html:has(.manager-layout),

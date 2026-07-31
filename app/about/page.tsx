@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import SiteHeader from '@/components/SiteHeader'
 
 export const metadata: Metadata = {
@@ -26,9 +27,10 @@ export default function AboutPage() {
               <div className="about-card-title">What is this?</div>
               <div className="about-card-body">
                 <p>
-                  BounceX Viewer is a web-based player for BounceX .bx files. It
-                  lets you watch videos synchronized with their BounceX path data
-                  in real time.
+                  BounceX Viewer is a self-hosted, web-based player for BounceX
+                  .bx files. It lets you watch videos and playlists synchronized
+                  with their BounceX path data in real time, from any device on
+                  your network.
                 </p>
               </div>
             </div>
@@ -50,24 +52,30 @@ export default function AboutPage() {
               <div className="about-card-title">How to use</div>
               <div className="about-card-body">
                 <p>
-                  Use the manager page to drag and drop .zip files containing
-                  packages, then hard refresh (ctrl + shift + R) to see the
-                  changes and watch new videos in the browse tab!
-                  <br />
-                  <br />
-                  For information on creating new packages, see the github page.
+                  Open the <Link href="/manager">Manager</Link> and drag in a .zip
+                  containing a package, then hard refresh (ctrl + shift + R) to
+                  see the changes and watch new videos in the browse tab.
+                </p>
+                <p>
+                  The Manager also validates every folder, so it&apos;s the
+                  fastest way to find a package that&apos;s put together wrong.
+                  The README covers the package layout if you&apos;re building
+                  one by hand.
                 </p>
               </div>
             </div>
 
             <div className="about-card">
-              <div className="about-card-title">Disclosure</div>
+              <div className="about-card-title">Credits</div>
               <div className="about-card-body">
                 <p>
-                  This site is created mostly by generative AI.
-                  <br />
-                  <br />
-                  Charts and videos are by their respective creators.
+                  This is a private fork of Alunacoz&apos;s BounceX Viewer,
+                  rebuilt on Next.js and TypeScript. All credit for the original
+                  app and its design goes there. BounceX itself is by Optiacku.
+                </p>
+                <p>
+                  Charts and videos are by their respective creators. This site
+                  is created mostly by generative AI.
                 </p>
               </div>
             </div>
@@ -80,19 +88,10 @@ export default function AboutPage() {
                     <span className="about-link-label">Dildo Hero Discord</span>
                   </a>
                   <a
-                    href="https://github.com/Alunacoz/BounceX-Viewer"
-                    className="about-link"
-                  >
-                    <span className="about-link-label">GitHub</span>
-                  </a>
-                  <a href="https://www.patreon.com/Alunacoz" className="about-link">
-                    <span className="about-link-label">Patreon</span>
-                  </a>
-                  <a
                     href="https://github.com/clbhundley/BounceX"
                     className="about-link"
                   >
-                    <span className="about-link-label">Original BounceX Github</span>
+                    <span className="about-link-label">BounceX (Optiacku)</span>
                   </a>
                 </div>
               </div>

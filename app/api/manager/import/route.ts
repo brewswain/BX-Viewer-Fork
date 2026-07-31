@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 3600
 
 /**
- * manager.py `api_import`. The client POSTs the raw .zip as the request body.
+ * Package import. The client POSTs the raw .zip as the request body.
  *
  * The upload lands in a staging directory under the repo root — the same volume
  * as videos/ and playlists/ — so each extracted package folder is moved into

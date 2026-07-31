@@ -10,8 +10,8 @@ interface AppConfig {
 }
 
 /**
- * manager.py `GET /manager-api/config`. Both servers now live on one port, but
- * the manager page still reads this, so the shape is preserved verbatim.
+ * Everything now lives on one port, but the manager page still reads this, so
+ * the two-port shape (`httpPort` + vestigial `managerPort`) is preserved.
  */
 export async function GET() {
   const config = await readJson<AppConfig>(CONFIG_PATH, {})

@@ -37,7 +37,7 @@ async function whichFfprobe(): Promise<string | null> {
   return null
 }
 
-/** Locate the playable file the way manager.py guesses when meta is silent. */
+/** Locate the playable file the way `synthesizeMeta` guesses when meta is silent. */
 async function guessVideoFile(folderId: string, folder: string): Promise<string | null> {
   for (const ext of VIDEO_EXTS) {
     if (await pathExists(path.join(folder, folderId + ext))) return folderId + ext
@@ -59,7 +59,7 @@ async function entryDuration(entry: unknown, ffprobe: string | null): Promise<nu
     const id = obj?.id ?? obj?.videoId
     folderId = typeof id === 'string' ? id : ''
   }
-  // manager.py `continue`d on a blank id — no duration, no warning.
+  // A blank id is skipped outright — no duration, no warning.
   if (!folderId) return null
   if (!isValidId(folderId)) return null
 
@@ -84,8 +84,8 @@ async function entryDuration(entry: unknown, ffprobe: string | null): Promise<nu
       videoDur = n / 60
     }
   } catch {
-    // Matches the Python: a bad meta.json resets the dict, so the ffprobe
-    // fallback below has to re-guess the video file from the folder.
+    // A bad meta.json resets the object, so the ffprobe fallback below has to
+    // re-guess the video file from the folder.
     vmeta = {}
     videoDur = null
   }
@@ -117,7 +117,7 @@ async function entryDuration(entry: unknown, ffprobe: string | null): Promise<nu
             }
           }
         } catch {
-          /* unprobeable — treated as unknown, same as the Python */
+          /* unprobeable — treated as unknown */
         }
       }
     }
@@ -130,9 +130,8 @@ async function entryDuration(entry: unknown, ffprobe: string | null): Promise<nu
 }
 
 /**
- * manager.py `_tally_playlist_duration`. The per-entry probes run concurrently
- * — the Python did them one at a time, which made saving a long playlist of
- * unprobed videos take seconds per entry.
+ * Total runtime of a playlist. The per-entry probes run concurrently —
+ * serially, saving a long playlist of unprobed videos costs seconds per entry.
  */
 export async function tallyPlaylistDuration(videos: unknown): Promise<number> {
   const list = Array.isArray(videos) ? videos : []

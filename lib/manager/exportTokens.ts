@@ -7,7 +7,7 @@ export interface ExportJob {
 }
 
 /**
- * One-use export tokens, matching manager.py's in-memory `_export_tokens` dict.
+ * One-use, in-memory export tokens.
  * The token exists only so the browser can be sent to a plain GET URL that its
  * native download manager can handle; it is consumed on first use.
  *
@@ -24,7 +24,7 @@ function store(): Map<string, ExportJob> {
   return g[KEY]!
 }
 
-/** `secrets.token_urlsafe(32)` — 32 random bytes, URL-safe base64. */
+/** 32 random bytes, URL-safe base64. */
 export function createExportToken(job: ExportJob): string {
   const token = crypto.randomBytes(32).toString('base64url')
   store().set(token, job)

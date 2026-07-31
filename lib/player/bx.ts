@@ -1,7 +1,6 @@
 /**
- * `.bx` parsing and path construction — ported verbatim from app/player-core.js
- * (`godotEase`, `buildPath`, `loadEffectFonts`) plus the marker/peak helpers
- * that app/player.js and app/playlist.js each kept their own copy of.
+ * `.bx` parsing and path construction — easing, path building, effect-font
+ * loading, and the marker/peak helpers shared by the watch and playlist pages.
  */
 
 import { VIDEO_BASE } from './constants'
@@ -147,9 +146,10 @@ export function findPeaks(sortedMarkers: { frame: number; depth: number }[]): nu
 }
 
 /**
- * playlist.js derives peaks from a *coerced* depth (`parseFloat(v[0]) || 0`)
- * rather than the raw marker array. Kept separate so both call sites stay
- * byte-for-byte faithful to their originals.
+ * Peaks from a raw marker map, where the depth is *coerced* (`parseFloat(…) || 0`)
+ * rather than trusted. Kept separate from `findPeaks` because the two call
+ * sites disagree on how a non-numeric depth should be treated, and the playlist
+ * page depends on the coercing form.
  */
 export function peaksFromMarkerData(markerData: MarkerData): number[] {
   return findPeaks(

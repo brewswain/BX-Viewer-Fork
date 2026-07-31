@@ -348,8 +348,8 @@ export default function CreatePlaylistOverlay({
 
       closeCreatePlaylist()
       // `editMode`/`editId` are read from the closure, so closeCreatePlaylist()
-      // resetting them can't clobber the branch — manager.html used module-level
-      // vars and always fell through to the "created" toast when saving an edit.
+      // resetting them can't clobber the branch below. Re-reading them from
+      // state here would send every edit down the "created" path.
       if (editMode) {
         const renamed = result.renamed ? ` (renamed to "${folderIdValue}")` : ''
         showToast('success', 'Playlist updated', `"${editId}" saved${renamed}.`)

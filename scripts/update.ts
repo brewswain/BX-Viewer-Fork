@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * BounceX Viewer Updater — port of scripts/update.py (Bun/TypeScript).
+ * BounceX Viewer Updater.
  *
  * 1. Ensures git is installed (installs it if not)
  * 2. Ensures this is a git repo pointed at the right remote (initialises if not)

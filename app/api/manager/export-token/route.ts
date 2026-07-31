@@ -11,7 +11,7 @@ function stringList(value: unknown): string[] {
 }
 
 /**
- * manager.py `api_export_token`: stash the selection and hand back a one-use
+ * Stash the export selection and hand back a one-use
  * token. Splitting it from the download lets the browser's native download
  * manager fetch the (potentially huge) archive over a plain GET.
  */

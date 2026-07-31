@@ -9,8 +9,7 @@ type Props = {
   active?: NavKey
   /**
    * Controlled search box (browse page). Omit for pages where the box is
-   * decorative — pass `searchEnabled` to keep it clickable-but-inert, which is
-   * what watch.html did.
+   * decorative — pass `searchEnabled` to keep it clickable-but-inert.
    */
   search?: { value: string; onChange: (value: string) => void }
   searchEnabled?: boolean

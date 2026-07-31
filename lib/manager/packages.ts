@@ -22,7 +22,7 @@ function asMeta(value: unknown): Meta | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Meta) : null
 }
 
-/** manager.py: `json.loads(fields.get('meta', '{}'))`. */
+/** The `meta` form field carries the whole meta.json as a JSON string. */
 function parseMetaField(form: ParsedForm): { meta: Meta } | { error: NextResponse } {
   let parsed: unknown
   try {
@@ -59,7 +59,6 @@ async function renameInManifest(
 
 // ── Videos ────────────────────────────────────────────────────────────────────
 
-/** manager.py `api_create_video`. */
 export async function createVideo(request: Request): Promise<NextResponse> {
   if (!isMultipart(request)) return jsonError('Expected multipart/form-data', 400)
 
@@ -132,7 +131,6 @@ export async function createVideo(request: Request): Promise<NextResponse> {
   }
 }
 
-/** manager.py `api_update_video`. */
 export async function updateVideo(request: Request, folderId: string): Promise<NextResponse> {
   if (!isValidId(folderId)) return jsonError('Invalid folder id', 400)
   if (!isMultipart(request)) return jsonError('Expected multipart/form-data', 400)
@@ -229,7 +227,6 @@ export async function updateVideo(request: Request, folderId: string): Promise<N
 
 // ── Playlists ─────────────────────────────────────────────────────────────────
 
-/** manager.py `api_create_playlist`. */
 export async function createPlaylist(request: Request): Promise<NextResponse> {
   if (!isMultipart(request)) return jsonError('Expected multipart/form-data', 400)
 
@@ -280,7 +277,6 @@ export async function createPlaylist(request: Request): Promise<NextResponse> {
   }
 }
 
-/** manager.py `api_update_playlist`. */
 export async function updatePlaylist(request: Request, folderId: string): Promise<NextResponse> {
   if (!isValidId(folderId)) return jsonError('Invalid folder id', 400)
   if (!isMultipart(request)) return jsonError('Expected multipart/form-data', 400)

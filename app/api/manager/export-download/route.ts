@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 3600
 
 /**
- * manager.py `api_export_download`: consume the token and stream the zip
+ * Consume the token and stream the zip
  * straight to the browser. Nothing is staged on disk or held in memory —
  * archiver reads each file as the client drains the response.
  */

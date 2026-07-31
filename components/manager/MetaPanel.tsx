@@ -26,9 +26,8 @@ type Props = {
 /**
  * Raw meta.json editor that slides in from the right.
  *
- * Carried over verbatim from manager.html, where `openMeta()` was defined but
- * never called — clicking a row opens the structured editor instead.  Kept so
- * the port stays 1:1.
+ * Not currently reachable from the UI — clicking a row opens the structured
+ * editor instead. Kept for editing fields that editor doesn't expose.
  */
 export default function MetaPanel({
   context,

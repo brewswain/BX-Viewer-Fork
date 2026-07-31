@@ -1,6 +1,6 @@
 /**
  * Stamps a fresh CACHE_NAME into public/sw.js so a restart invalidates the
- * previous service-worker cache. Port of scripts/bump-sw.py.
+ * previous service-worker cache.
  *
  * The declaration is stripped on commit by the strip-cache-name git filter,
  * so on a fresh clone there is no line to replace — insert one.

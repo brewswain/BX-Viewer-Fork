@@ -3,8 +3,8 @@
 import { memo, type RefObject } from 'react'
 
 /**
- * JSX port of `buildVideoWrapHTML()` from app/player-core.js — the `<video>`,
- * the optional loading/buffering/seeking overlays, and the BounceX canvas.
+ * The `<video>`, the optional loading/buffering/seeking overlays, and the
+ * BounceX canvas.
  *
  * Every id and class name is unchanged: app/globals.css targets them, and the
  * engine still looks the overlay nodes up by id.

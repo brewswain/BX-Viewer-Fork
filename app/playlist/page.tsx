@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Playlist page — port of app/playlist.html + app/playlist.js.
+ * Playlist page.
  *
  * One engine instance lives for the whole playlist; `loadTrack()` swaps the
  * video src and the bx path data underneath it rather than tearing the engine

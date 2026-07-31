@@ -5,7 +5,6 @@ import { pathExists, readJsonStrict } from './fsx'
 
 export type Section = 'videos' | 'playlists'
 
-/** manager.py: `base = VIDEO_BASE if section == "videos" else PLAYLIST_BASE`. */
 export function baseFor(section: Section): string {
   return section === 'videos' ? VIDEO_BASE : PLAYLIST_BASE
 }

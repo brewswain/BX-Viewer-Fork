@@ -1,6 +1,5 @@
 /**
- * BounceX player engine — a direct TypeScript port of `createPlayerEngine()`
- * from app/player-core.js.
+ * BounceX player engine.
  *
  * Deliberately imperative and *outside* React: the render loop is driven by
  * requestAnimationFrame and mutates the canvas and the control DOM directly.

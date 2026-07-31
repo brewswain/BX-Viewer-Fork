@@ -20,8 +20,7 @@ export interface ParsedForm {
 }
 
 /**
- * Streaming multipart/form-data reader, replacing manager.py's hand-rolled
- * parser.
+ * Streaming multipart/form-data reader.
  *
  * `request.formData()` is deliberately avoided: it materialises every part in
  * memory, and this endpoint accepts multi-GB video uploads. busboy is fed the
@@ -29,10 +28,9 @@ export interface ParsedForm {
  * the caller picks so that it sits on the destination volume — the subsequent
  * `moveInto` is then a rename, not a copy.
  *
- * Note: filenames are reduced with `path.basename`. manager.py joined the raw
- * client-supplied filename onto the package folder, which let a crafted part
- * write outside it. Browsers never send a path here, so this is invisible in
- * practice.
+ * Note: filenames are reduced with `path.basename`, so a crafted part cannot
+ * escape the package folder. Browsers never send a path here, so this is
+ * invisible in practice.
  */
 export async function parseMultipart(request: Request, tmpBase: string): Promise<ParsedForm> {
   const contentType = request.headers.get('content-type') ?? ''
@@ -47,8 +45,8 @@ export async function parseMultipart(request: Request, tmpBase: string): Promise
     await new Promise<void>((resolve, reject) => {
       const bb = busboy({
         headers: { 'content-type': contentType },
-        // manager.py imposed no limits; busboy's defaults would silently
-        // truncate the `meta` field at 1 MB.
+        // Limits are lifted: busboy's defaults would silently truncate the
+        // `meta` field at 1 MB.
         limits: {
           fieldSize: Infinity,
           fieldNameSize: Infinity,
@@ -94,7 +92,6 @@ export async function parseMultipart(request: Request, tmpBase: string): Promise
   return { fields, files, tmpDir, cleanup: () => rmrf(tmpDir) }
 }
 
-/** manager.py checked `'multipart/form-data' not in ct`. */
 export function isMultipart(request: Request): boolean {
   return (request.headers.get('content-type') ?? '').includes('multipart/form-data')
 }

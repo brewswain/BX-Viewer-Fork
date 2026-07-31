@@ -1,6 +1,5 @@
 videos/*
 playlists/*
-venv/
 
 # Import staging dir — removed in a `finally`, so this only catches a hard crash.
 .tmp-import-*

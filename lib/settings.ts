@@ -1,7 +1,7 @@
 /**
- * User settings, persisted in localStorage. Port of app/settings.js — the
- * storage key and every default are unchanged so existing installs keep their
- * preferences across the migration.
+ * User settings, persisted in localStorage. The storage key and the defaults
+ * are load-bearing: changing either silently resets every existing install's
+ * preferences.
  */
 
 export const BX_SETTINGS_KEY = 'bx_viewer_settings'

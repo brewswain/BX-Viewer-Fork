@@ -8,7 +8,7 @@ export type Meta = Record<string, unknown>
 const VIDEO_EXTS = ['.mp4', '.webm', '.mkv', '.mov']
 
 /**
- * manager.py `_synthesize_meta`: meta.json is optional, so when it is absent we
+ * meta.json is optional, so when it is absent we
  * guess the package contents from the folder listing using the conventional
  * `<folder>.<ext>` names, falling back to the first matching file.
  */
@@ -58,7 +58,7 @@ function asObject(value: unknown): Meta | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Meta) : null
 }
 
-/** manager.py `api_videos` — validates each manifest entry and annotates it. */
+/** Validates each manifest entry and annotates it with the errors found. */
 export async function listVideos(): Promise<Meta[]> {
   const manifest = await readManifest('videos')
   const results: Meta[] = []
@@ -133,7 +133,7 @@ export async function listVideos(): Promise<Meta[]> {
   return results
 }
 
-/** manager.py `api_playlists`. */
+/** The playlist counterpart to {@link listVideos}. */
 export async function listPlaylists(): Promise<Meta[]> {
   const manifest = await readManifest('playlists')
   const results: Meta[] = []

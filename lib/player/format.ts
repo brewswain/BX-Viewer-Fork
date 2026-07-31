@@ -1,6 +1,5 @@
 /**
- * Formatting, escaping, fetch and colour helpers — ported verbatim from
- * app/player-core.js.
+ * Formatting, escaping, fetch and colour helpers.
  *
  * `escHtml` / `renderDescription` still return HTML *strings*: descriptions may
  * contain `[label](url)` links and `\n` breaks, so the pages feed the result to

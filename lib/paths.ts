@@ -14,7 +14,7 @@ export const VIDEO_MANIFEST = path.join(VIDEO_BASE, 'manifest.json')
 export const PLAYLIST_MANIFEST = path.join(PLAYLIST_BASE, 'manifest.json')
 
 /**
- * Mirrors manager.py's id guard: an id is a single folder name, never a path.
+ * An id is a single folder name, never a path.
  * Rejects separators and the dot entries outright rather than normalising,
  * so a traversal attempt is an error instead of a silent rewrite.
  */

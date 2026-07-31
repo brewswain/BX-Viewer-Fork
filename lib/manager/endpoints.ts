@@ -11,8 +11,8 @@ export function typeNameFor(section: Section): 'video' | 'playlist' {
 }
 
 /**
- * manager.py `unquote`d the folder id out of the raw path. Matches how
- * `app/videos/[...path]/route.ts` treats its segments; the try/catch keeps a
+ * Percent-decode a folder id out of the raw path, matching how
+ * `app/videos/[...path]/route.ts` treats its segments. The try/catch keeps a
  * literal `%` in a folder name from throwing a URIError.
  */
 export function decodeSegment(value: string): string {
@@ -27,7 +27,7 @@ export function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-/** Wraps a handler the way manager.py's `do_*` methods wrapped each dispatch. */
+/** Turns an unhandled throw into a 500 with the error text, rather than a crash. */
 export async function guard(fn: () => Promise<NextResponse>): Promise<NextResponse> {
   try {
     return await fn()
@@ -36,7 +36,6 @@ export async function guard(fn: () => Promise<NextResponse>): Promise<NextRespon
   }
 }
 
-/** manager.py `api_read_meta`. */
 export async function handleReadMeta(section: Section, folderId: string): Promise<NextResponse> {
   if (!isValidId(folderId)) return jsonError('Invalid folder id', 400)
   const metaPath = path.join(baseFor(section), folderId, 'meta.json')
@@ -50,7 +49,6 @@ export async function handleReadMeta(section: Section, folderId: string): Promis
   }
 }
 
-/** manager.py `api_write_meta`. */
 export async function handleWriteMeta(
   request: Request,
   section: Section,
@@ -77,7 +75,7 @@ export async function handleWriteMeta(
   return jsonResponse({ saved: folderId })
 }
 
-/** manager.py `api_delete_video` / `api_delete_playlist`. */
+/** Removes the folder from disk and drops its manifest entry. */
 export async function handleDelete(section: Section, folderId: string): Promise<NextResponse> {
   if (!isValidId(folderId)) return jsonError('Invalid folder id', 400)
   if (!(await manifestExists(section))) {
@@ -97,7 +95,7 @@ export async function handleDelete(section: Section, folderId: string): Promise<
   return jsonResponse({ deleted: folderId, type: typeNameFor(section) })
 }
 
-/** manager.py `api_reorder` — a permutation only, never an insertion. */
+/** Rewrites the manifest order — a permutation only, never an insertion. */
 export async function handleReorder(request: Request, section: Section): Promise<NextResponse> {
   if (!(await manifestExists(section))) {
     return jsonError(`${section}/manifest.json not found`, 404)
@@ -117,8 +115,8 @@ export async function handleReorder(request: Request, section: Section): Promise
     return jsonError('Expected a JSON array of strings', 400)
   }
 
-  // Set equality, matching the Python: the client may only permute what is
-  // already there, so a stale tab cannot inject or drop an entry.
+  // Set equality: the client may only permute what is already there, so a
+  // stale tab cannot inject or drop an entry.
   const current = new Set(await readManifest(section))
   const proposed = new Set(newOrder as string[])
   const sameEntries =

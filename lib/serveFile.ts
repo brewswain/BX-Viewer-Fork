@@ -35,7 +35,7 @@ export function contentTypeFor(filePath: string): string {
   return MIME[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream'
 }
 
-/** `bytes=start-end`, `bytes=start-`, `bytes=-suffix`. Multi-range is not supported (nor was it in server.py). */
+/** `bytes=start-end`, `bytes=start-`, `bytes=-suffix`. Multi-range is not supported. */
 function parseRange(header: string, size: number): { start: number; end: number } | null {
   const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
   if (!m) return null
@@ -64,9 +64,8 @@ function toWebStream(nodeStream: fs.ReadStream): ReadableStream<Uint8Array> {
 }
 
 /**
- * Range-aware static file responder — the replacement for server.py's
- * do_GET. Range support is what makes multi-GB videos scrubbable, so the
- * 206 path must stay byte-exact.
+ * Range-aware static file responder. Range support is what makes multi-GB
+ * videos scrubbable, so the 206 path must stay byte-exact.
  */
 export async function serveFile(filePath: string, request: Request): Promise<Response> {
   let stat: fs.Stats
