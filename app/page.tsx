@@ -31,6 +31,18 @@ async function fetchJSON(url: string) {
 }
 
 /**
+ * A section manifest, treating absence (404) as an empty library rather than an
+ * error. Neither manifest ships with the repo — the manager writes one on the
+ * first import — so a fresh install has no videos, not a broken page.
+ */
+async function fetchManifest(url: string): Promise<string[]> {
+  const res = await fetch(url, { cache: 'no-store' })
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
+  return res.json()
+}
+
+/**
  * Fetch a video's meta.json, returning a synthesised fallback if it is absent
  * (404) so that meta.json is not required for every video folder.
  */
@@ -114,7 +126,7 @@ function Browse() {
   // ── Boot ─────────────────────────────────────────────────────────────────
   const loadVideos = useCallback(async () => {
     try {
-      const manifest: string[] = await fetchJSON(`${VIDEO_BASE}/manifest.json`)
+      const manifest = await fetchManifest(`${VIDEO_BASE}/manifest.json`)
       const metas = await Promise.all(
         manifest.map((id) =>
           fetchVideoMeta(id).then((m) => ({ ...m, _folder: id })),
@@ -131,7 +143,7 @@ function Browse() {
 
   const loadPlaylists = useCallback(async () => {
     try {
-      const manifest: string[] = await fetchJSON(`${PLAYLIST_BASE}/manifest.json`)
+      const manifest = await fetchManifest(`${PLAYLIST_BASE}/manifest.json`)
       const list: PlaylistMeta[] = await Promise.all(
         manifest.map((id) =>
           fetchJSON(`${PLAYLIST_BASE}/${encodeURIComponent(id)}/meta.json`).then(

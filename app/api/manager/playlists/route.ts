@@ -1,4 +1,4 @@
-import { jsonError, jsonResponse } from '@/lib/json'
+import { jsonResponse } from '@/lib/json'
 import { guard } from '@/lib/manager/endpoints'
 import { manifestExists } from '@/lib/manager/manifest'
 import { listPlaylists } from '@/lib/manager/meta'
@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   return guard(async () => {
-    if (!(await manifestExists('playlists'))) {
-      return jsonError('playlists/manifest.json not found', 404)
-    }
+    // No manifest means no library yet — see the videos route.
+    if (!(await manifestExists('playlists'))) return jsonResponse([])
     return jsonResponse(await listPlaylists())
   })
 }

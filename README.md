@@ -139,6 +139,8 @@ playlists/
     thumb.jpg
 ```
 
+Neither `manifest.json` ships with the repo — `videos/` and `playlists/` are gitignored, so your library stays yours. The manager writes them on your first import, and until then a fresh install just shows an empty library rather than an error.
+
 Each `manifest.json` is a plain JSON array of folder names, and it controls both **visibility and display order** — a folder that isn't listed in the manifest won't show up at all:
 
 ```json
