@@ -2,8 +2,9 @@
  * Stamps a fresh CACHE_NAME into public/sw.js so a restart invalidates the
  * previous service-worker cache.
  *
- * The declaration is stripped on commit by the strip-cache-name git filter,
- * so on a fresh clone there is no line to replace — insert one.
+ * The stamp is committed like any other content, so public/sw.js reads as
+ * modified after every build. That churn is expected — don't stage it with
+ * unrelated work. The insert branch covers a sw.js with no declaration yet.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
