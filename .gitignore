@@ -1,3 +1,19 @@
 videos/*
 playlists/*
 venv/
+
+# Import staging dir — removed in a `finally`, so this only catches a hard crash.
+.tmp-import-*
+
+# Next.js / bun
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env*.local
+
+# bun.lock IS committed — this is an app, so installs should be reproducible.
+# It cannot be regenerated on an exFAT volume (see README/launcher notes); use
+# an NTFS checkout to refresh it.
+bun.lockb

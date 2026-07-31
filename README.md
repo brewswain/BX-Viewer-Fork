@@ -1,9 +1,15 @@
-# BounceX-Viewer
+# BX-Viewer-Fork
 
-> **License:** MIT License + Commons Clause  
+> **License:** MIT License + Commons Clause
 > ⚠️ **Note:** Don't commercialize it without permission!
 
-An admittedly vibe-coded, self-hosted, private video viewer that syncs BounceX paths to corresponding videos with full customization options.
+A self-hosted, private video viewer that syncs BounceX paths to their corresponding videos, with full customization options.
+
+## About this fork
+
+This is a fork of [BounceX Viewer](https://github.com/Alunacoz/BounceX-Viewer) by Alunacoz — all credit for the original app, its design, and its features goes there. The fork rebuilds the app on **Next.js 15 (App Router) + TypeScript, running on Bun**, replacing the original's Python stdlib servers. Everything below describes running *this* fork; the upstream repo's install instructions do not apply here.
+
+BounceX itself — the beat marker creation and rendering tool the `.bx` path files come from — is by Optiacku: [clbhundley/BounceX](https://github.com/clbhundley/BounceX). This project is not endorsed by or affiliated with it.
 
 ## AI Disclosure
 
@@ -27,6 +33,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Example Screenshots
+
 <img width="2555" height="620" alt="image" src="https://github.com/user-attachments/assets/457f246f-4a65-449e-bbbf-b6d26abe3fcc" />
 <p align="center">The main dashboard!</p>
 
@@ -42,28 +49,187 @@ This program was written with generative AI, with human intervention as well. I 
 <img width="859" height="1418" alt="image" src="https://github.com/user-attachments/assets/5f8f6439-1347-47eb-a817-2ed22bf51099" />
 <p align="center">Manager's "add video" panel!</p>
 
+## Requirements
+
+**[Bun](https://bun.sh)** — that's the whole list.
+
+**Python is no longer required.** If you followed the original project's instructions before, you can ignore anything about installing Python 3 or creating a `venv`; nothing in this fork uses them.
+
 ## Getting Started
 
-See [Installation](https://github.com/Alunacoz/BounceX-Viewer/wiki/Installation) to get started!
+Clone the repo, then start it with the launcher for your platform:
 
-### Troubleshooting
+| Platform | Launcher |
+|---|---|
+| Windows | `StartWebsite.ps1` (right-click → Run with PowerShell) |
+| Windows (double-click) | `StartWebsite.bat` — just a wrapper around the `.ps1` |
+| macOS / Linux | `StartWebsite.sh` |
+
+The launcher installs dependencies if needed, starts the server, prints the LAN URL to open on other devices, and opens your browser.
+
+### Manual
+
+If you'd rather drive it yourself:
+
+```sh
+bun install --frozen-lockfile
+
+# development (hot reload)
+bun run dev
+
+# production
+bun run build
+bun run start
+```
+
+Then open <http://localhost:8000>.
+
+`bun.lock` is committed, and `--frozen-lockfile` installs exactly what it pins — so everyone gets the same dependency tree, rather than letting plain `bun install` quietly drift within semver ranges. The launcher and updater scripts do the same thing. (Plain `bun install` is what you want only when you're deliberately changing dependencies and mean to refresh the lockfile.)
+
+### Ports
+
+The app serves **everything on a single port** — default `8000`, set by `httpPort` in `config.json`:
+
+```json
+{
+  "httpPort": 8000,
+  "managerPort": 8001
+}
+```
+
+The original's two-server split (content on 8000, manager on 8001) is gone. The manager is now just another page at `/manager` on the same origin, and `managerPort` is vestigial — it's kept only so old config files still parse, and changing it does nothing.
+
+To use a different port, change `httpPort` and restart.
+
+## Routes
+
+| Route | What it is |
+|---|---|
+| `/` | Browse — grid of all videos and playlists |
+| `/watch?v=<id>` | Player for a single video (`<id>` is the folder name under `videos/`) |
+| `/playlist?p=<id>` | Playlist view (`<id>` is the folder name under `playlists/`) |
+| `/settings` | Path colors, size, speed, DH mode, Y-flip, overlay options |
+| `/about` | About page and links |
+| `/manager` | Import, delete, reorder, and edit metadata for videos and playlists |
+
+Media is served straight from disk at `/videos/<folder>/<file>` and `/playlists/<folder>/<file>` with HTTP Range support, so seeking works on large files.
+
+## Adding content
+
+**The easy way:** open `/manager` and drag in a `.zip`. The importer looks for any `videos/` or `playlists/` directory anywhere inside the archive and copies their child folders into place, then updates the manifests for you. Both a flat layout (`videos/Foo/`) and a wrapped one (`MyPack/videos/Foo/`) work. Folders whose name is already in the manifest are skipped rather than overwritten. Hard-refresh afterwards (`Ctrl + Shift + R`) to pick up the changes.
+
+Everything below is what the importer produces — useful if you're building a package by hand or debugging one that won't load.
+
+### Layout
+
+```
+videos/
+  manifest.json          # ordered list of video folder names
+  Drop/
+    meta.json
+    drop.mp4
+    drop.bx
+    thumb.jpg
+playlists/
+  manifest.json          # ordered list of playlist folder names
+  BXLiteVol5/
+    meta.json
+    thumb.jpg
+```
+
+Each `manifest.json` is a plain JSON array of folder names, and it controls both **visibility and display order** — a folder that isn't listed in the manifest won't show up at all:
+
+```json
+["Drop", "Hopeless", "Question Marks"]
+```
+
+The manager's reorder UI just rewrites this array.
+
+### `videos/<folder>/meta.json`
+
+```json
+{
+  "title": "AMORTAL & Castroe - Drop",
+  "videoCreator": "SHIBUI",
+  "pathCreator": "Things&Stuff",
+  "bpm": 117,
+  "description": [
+    "The 11th song in BounceX Lite Volume 5.",
+    "Credits:",
+    "Original Path by [Things&Stuff](https://example.com/)"
+  ],
+  "tags": ["bouncex", "hard", "single song"],
+  "highlightedTags": ["BounceX", "Hard"],
+  "videoFile": "drop.mp4",
+  "thumbnail": "thumb.jpg",
+  "bxFiles": [
+    { "label": "Hard - Things&Stuff", "file": "drop.bx" }
+  ],
+  "durationSecs": 181.867
+}
+```
+
+Notes on the fields:
+
+- **`bxFiles` is the only truly required one.** It's a list, so one video can carry several paths (difficulties, alternate routes); each entry is `{ "label", "file" }` and the player shows `label` in the path picker. A legacy single `"bxFile": "drop.bx"` is still accepted and normalized to `bxFiles` with the label `Default`.
+- **`videoFile`** defaults to `<folder>.mp4` if omitted.
+- **`thumbnail`, `description`, `tags`, `highlightedTags`, `bpm`, `videoCreator`, `pathCreator`, `durationSecs`** are all optional. `description` may be a string or an array of lines, and supports `[text](url)` links. `highlightedTags` is the subset of tags shown as badges on the card.
+- **`meta.json` itself is optional.** If it's missing, the app synthesizes a minimal one by scanning the folder: it looks for `<folder>.mp4` (then any `.mp4`/`.webm`/`.mkv`/`.mov`), `<folder>.bx` (then any `.bx`), and a thumbnail named `thumb.jpg`, `thumb.png`, `<folder>.jpg`, or `<folder>.png`. The title falls back to the folder name. The manager flags these entries so you can see they're guesses.
+
+The manager page validates every folder and reports missing video files, missing `.bx` files, and missing thumbnails, so it's the fastest way to find a package that's put together wrong.
+
+### `playlists/<folder>/meta.json`
+
+```json
+{
+  "title": "BounceX LITE Dildo Hero Volume 5",
+  "author": "Things&Stuff",
+  "description": "All the songs in Volume 5, in order.",
+  "tags": ["Easy to Extreme"],
+  "thumbnail": "thumb.jpg",
+  "totalDurationSecs": 2680.464,
+  "videos": [
+    "Multiverse",
+    "Hope",
+    { "id": "The KDA Experience", "bxFile": "thingsandstuff.bx" }
+  ]
+}
+```
+
+`videos` entries reference video folder names. Use the plain-string form for "play this video with its default path", or the object form to pin a specific `.bx` file when the video has several. Playlists hold no media of their own beyond a thumbnail. Unlike videos, playlists **require** a `meta.json`.
+
+## Updating
+
+Run the updater for your platform:
+
+| Platform | Updater |
+|---|---|
+| Windows | `Update.ps1` |
+| Windows (double-click) | `Update.bat` |
+| macOS / Linux | `Update.sh` |
+
+These pull from this fork, [brewswain/BX-Viewer-Fork](https://github.com/brewswain/BX-Viewer-Fork), and refresh dependencies. Your `videos/` and `playlists/` directories are gitignored, so your library is left alone.
+
+## Troubleshooting
 
 If you run into any issues, try a hard refresh:
 
-**Windows/Linux:** `Ctrl + Shift + R`  
+**Windows/Linux:** `Ctrl + Shift + R`
 **Mac:** `Cmd + Shift + R`
 
-This resolves most caching issues that may occur. This also may erase some settings.
-Alternatively, in your browser settings delete your cache/cookies.
+This resolves most caching issues that may occur (the app registers a service worker, so a stale cache is the usual culprit). This also may erase some settings. Alternatively, in your browser settings delete your cache/cookies.
 
-**Need more help?** Check the existing examples in the `/videos/` directory for reference implementations or ask me directly on Discord! You can find me in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC), and my DMs are open!
+If a video doesn't appear at all, check `/manager` — it lists per-folder errors and warnings, and a missing manifest entry is the most common cause.
 
+**`bun install` fails with `EINVAL: Failed to replace old lockfile with new lockfile on disk`** (or a launcher that aborts partway through installing). This happens when the repo lives on an **exFAT** volume — exFAT doesn't support the atomic file-replace semantics Bun uses to write `bun.lock` (it also rejects hardlinks). Nothing is corrupt and there is no stale "old lockfile" to delete, despite what the message says; the packages actually install fine, Bun just exits `1` on the lockfile write. Use `bun install --frozen-lockfile` instead — a `bun.lock` is committed to the repo root, so a frozen install works out of the box and skips the write entirely. Note that *regenerating* `bun.lock` after changing dependencies still needs a checkout on NTFS, ext4, or APFS.
 
-## Future Updates
-
-There's a lot to be done! The top of the list are features that I'm closer to finishing, and the bottom means it's low priority/very difficult.
-- OSSM/Other Machine support (I don't have any, so it's kinda hard to work on... I'm looking into [Buttplug.io](https://buttplug.io/) specifically though)
+**Need more help?** Check the existing examples in the `videos/` directory for reference implementations, or ask upstream on Discord — the original author is in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC).
 
 ## Credits
 
-Thank you to [Optiacku](https://github.com/clbhundley/BounceX) in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC) for creating the original concept for BounceX! (This project was not endorsed or encouraged by Optiacku, I merely made a more convenient way to view the .bx files)
+- [Alunacoz](https://github.com/Alunacoz/BounceX-Viewer) — original BounceX Viewer, which this repo forks.
+- [Optiacku](https://github.com/clbhundley/BounceX) in the [DH Discord Server](https://discord.gg/u6CZ3Zm4PC) — creator of BounceX itself. This project was not endorsed or encouraged by Optiacku; it's merely a more convenient way to view the `.bx` files.
+
+## License
+
+MIT License with the [Commons Clause](https://commonsclause.com/) condition — see [LICENSE](LICENSE). You can use, modify, and redistribute it freely, but you may not sell it or offer it as a paid hosted service.

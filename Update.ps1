@@ -7,20 +7,38 @@ Write-Host ""
 Write-Host "  BounceX Viewer - Updater" -ForegroundColor Cyan
 Write-Host ""
 
-$py = $null
-foreach ($cmd in @("python", "python3")) {
-    $v = & $cmd --version 2>&1
-    if ($LASTEXITCODE -eq 0 -and $v -match "Python 3") { $py = $cmd; break }
+$bun = (Get-Command bun -ErrorAction SilentlyContinue).Source
+if (-not $bun -and (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) {
+    # Installed but not on PATH for this session yet.
+    $bun = "$env:USERPROFILE\.bun\bin\bun.exe"
 }
-if (Test-Path "$PSScriptRoot\venv\Scripts\python.exe") {
-    $py = "$PSScriptRoot\venv\Scripts\python.exe"
-}
-if (-not $py) {
-    Write-Host "  Python 3 not found. Install from https://www.python.org/" -ForegroundColor Red
+
+if (-not $bun) {
+    Write-Host "  !! Bun not found." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "     Bun is the JavaScript runtime this app runs on." -ForegroundColor DarkGray
+    Write-Host "     It can be installed with:  winget install Oven-sh.Bun" -ForegroundColor DarkGray
+    Write-Host ""
+    $ans = Read-Host "  Install Bun via winget? (Y/N)"
+    if ($ans -match "^[Yy]") {
+        Write-Host "  >> Running winget..." -ForegroundColor Yellow
+        winget install Oven-sh.Bun --source winget --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  OK Bun installed." -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  Please close this window and run the updater again." -ForegroundColor Cyan
+            Write-Host "  (PATH changes only take effect in a new session.)" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  !! Winget failed. Install manually: https://bun.sh/" -ForegroundColor Red
+        }
+    } else {
+        Write-Host "  Install manually: https://bun.sh/" -ForegroundColor DarkGray
+    }
+    Write-Host ""
     Read-Host "  Press Enter to exit"
     exit 1
 }
 
-& $py scripts\update.py
+& $bun scripts\update.ts @args
 
 Write-Host ""
