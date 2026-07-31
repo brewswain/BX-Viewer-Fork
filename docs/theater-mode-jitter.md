@@ -94,9 +94,28 @@ Two process notes worth keeping:
 - **Opening the BX tab mounts all ~4k rows at once**, so expect a one-time hitch on first
   open. `content-visibility` keeps scrolling cheap afterwards. Virtualising the list is
   the real fix if that hitch ever matters — see below.
-- **The engine's rAF loop in `lib/player/engine.ts` runs unconditionally forever**, with no
-  pause gating. Not the cause of this bug, but it burns a frame's work while paused.
-  BX-Editor-FX already gates on a `needsContinuousFrame()` predicate; worth porting.
+## Follow-up: rAF gating (done)
+
+The engine's loop used to run unconditionally forever — 144 draws a second with the video
+paused. It now stops when nothing is moving (`needsContinuousFrame()` in
+`lib/player/engine.ts`, ported from BX-Editor-FX), and anything that changes what a frame
+would paint calls `scheduleFrame()`.
+
+Measured on the dev server, paused: **0 draws/s** (was 144). Playing is unchanged at 144.
+Each control produces just the frames it needs — seek 9, sliders 1-2, overlay/flip/theater
+1-2 — then returns to 0.
+
+Two traps this created, both handled:
+
+- **`drawBounceX` reads the zoom and speed sliders straight from the DOM**, not from state,
+  so their changes used to be picked up by whatever frame happened to run next. Zoom only
+  resized the canvas when *not* in overlay mode and speed had no listener at all — both now
+  have explicit `input` handlers.
+- **The device driver's stop depends on a frame running after `pause`.** `StrokeDriver.tick`
+  only issues `backend.stop()` on an inactive tick, so if the loop halted without one, the
+  machine would hold its last move. The `pause` / `ended` / `seeking` events schedule exactly
+  one final frame — verified: 1 frame after pause, 0 thereafter. Any new "no longer
+  advancing" state that doesn't fire one of those events must call `scheduleFrame()` itself.
 
 ## Prior art in BX-Editor-FX
 

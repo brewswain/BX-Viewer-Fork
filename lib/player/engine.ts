@@ -232,6 +232,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     }
     canvas.width = w || bxWrap.offsetWidth || 800
     canvas.height = h
+    // Resizing clears the canvas, so it always needs a repaint. Catches the
+    // ResizeObserver, fullscreen/theater transitions and the public API at once.
+    scheduleFrame()
   }
 
   // ── Canvas rendering ────────────────────────────────────────────────────────
@@ -569,7 +572,28 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   // ── RAF loop ────────────────────────────────────────────────────────────────
+  /**
+   * The loop only keeps itself alive while something is actually moving; when
+   * it stops, the canvas simply keeps whatever the last frame painted. So
+   * anything that changes what `drawBounceX` would paint has to call
+   * `scheduleFrame()` — previously a frame was always about to run and picked
+   * every change up for free.
+   *
+   * Watch the two sliders in particular: `drawBounceX` reads their values
+   * straight out of the DOM rather than from state, so they need `input`
+   * handlers of their own.
+   */
+  function needsContinuousFrame(): boolean {
+    return (!video.paused && !video.ended) || isSeeking || scrubbing
+  }
+
+  function scheduleFrame() {
+    if (destroyed || rafId) return
+    rafId = requestAnimationFrame(loop)
+  }
+
   function loop(rafTime: number) {
+    rafId = 0
     if (destroyed) return
     if (!isSeeking) {
       if (!video.paused && !video.ended) {
@@ -595,7 +619,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     timeDisplay.textContent = `${framesToTimecode(Math.floor(t * FPS))} / ${framesToTimecode(totalFrames)}`
 
     drawBounceX()
-    rafId = requestAnimationFrame(loop)
+    if (needsContinuousFrame()) scheduleFrame()
+    // Dropping the timestamp makes the next run re-sync `smoothTime` to
+    // `currentTime` instead of integrating the whole idle gap.
+    else lastRafTime = null
   }
 
   // ── Overlay toggles ─────────────────────────────────────────────────────────
@@ -613,6 +640,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     overlayBg = !overlayBg
     overlayBgBtn.textContent = `bg: ${overlayBg ? 'on' : 'off'}`
     overlayBgBtn.classList.toggle('active', overlayBg)
+    scheduleFrame()
   })
 
   if (flipYBtn) {
@@ -620,11 +648,20 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       flipY = !flipY
       flipYBtn.textContent = `flip Y: ${flipY ? 'on' : 'off'}`
       flipYBtn.classList.toggle('active', flipY)
+      scheduleFrame()
     })
   }
 
+  // Both sliders are read out of the DOM inside `drawBounceX`, so a change is
+  // invisible until a frame runs. In overlay mode zoom doesn't resize the
+  // canvas, and speed never did — hence the explicit repaints.
   on(zoomSliderEl, 'input', () => {
     if (!isOverlay) resizeCanvas()
+    else scheduleFrame()
+  })
+
+  on(speedSliderEl, 'input', () => {
+    scheduleFrame()
   })
 
   // ── Playback controls ───────────────────────────────────────────────────────
@@ -706,6 +743,26 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (onSeeked) onSeeked()
   })
 
+  // Anything that can move the playhead or change what a frame would paint has
+  // to wake the loop now that it stops when idle. `timeupdate` is the backstop
+  // for programmatic `currentTime` writes the browser serves straight from
+  // buffer without a `seeking` event.
+  for (const evt of [
+    'play',
+    'pause',
+    'ended',
+    'seeking',
+    'seeked',
+    'timeupdate',
+    'loadedmetadata',
+    'loadeddata',
+    'canplay',
+    'durationchange',
+    'ratechange',
+  ]) {
+    on(video, evt, scheduleFrame)
+  }
+
   if (onCanPlay) on(video, 'canplay', onCanPlay)
   if (onWaiting) on(video, 'waiting', onWaiting)
   if (onPlaying) on(video, 'playing', onPlaying)
@@ -749,6 +806,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   on(progressWrap, 'mousedown', (e: MouseEvent) => {
     scrubbing = true
     seekTo(e.clientX)
+    scheduleFrame() // grabbing the thumb at the current position seeks nowhere
   })
   on(document, 'mousemove', (e: MouseEvent) => {
     if (scrubbing) seekTo(e.clientX)
@@ -763,6 +821,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     (e: TouchEvent) => {
       scrubbing = true
       if (e.touches.length) seekTo(e.touches[0].clientX)
+      scheduleFrame()
     },
     { passive: true },
   )
@@ -914,7 +973,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const resizeObserver = new ResizeObserver(() => resizeCanvas())
   resizeObserver.observe(bxWrap)
   resizeCanvas()
-  rafId = requestAnimationFrame(loop)
+  scheduleFrame()
 
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
@@ -943,14 +1002,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       } else {
         activePeaks = []
       }
+      scheduleFrame()
     },
     resetSmoothTime() {
       smoothTime = 0
       lastRafTime = null
+      scheduleFrame()
     },
     resizeCanvas,
     setOffset(secs) {
       offsetSecs = typeof secs === 'number' && secs > 0 ? secs : 0
+      scheduleFrame()
     },
     destroy() {
       destroyed = true
