@@ -7,7 +7,7 @@ A self-hosted, private video viewer that syncs BounceX paths to their correspond
 
 ## About this fork
 
-This is a fork of [BounceX Viewer](https://github.com/Alunacoz/BounceX-Viewer) by Alunacoz — all credit for the original app, its design, and its features goes there. The fork rebuilds the app on **Next.js 15 (App Router) + TypeScript, running on Bun**, replacing the original's Python stdlib servers. Everything below describes running *this* fork; the upstream repo's install instructions do not apply here.
+This is a fork of [BounceX Viewer](https://github.com/Alunacoz/BounceX-Viewer) by Alunacoz — all credit for the original app, its design, and its features goes there. The fork rebuilds the app on **Next.js 16 (App Router) + TypeScript, running on Bun**, replacing the original's Python stdlib servers. Everything below describes running *this* fork; the upstream repo's install instructions do not apply here.
 
 BounceX itself — the beat marker creation and rendering tool the `.bx` path files come from — is by Optiacku: [clbhundley/BounceX](https://github.com/clbhundley/BounceX). This project is not endorsed by or affiliated with it.
 
