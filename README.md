@@ -51,9 +51,11 @@ This program was written with generative AI, with human intervention as well. I 
 
 ## Requirements
 
-**[Bun](https://bun.sh)** — that's the whole list.
+**[Bun](https://bun.sh)** — that's the whole list for running the app.
 
-**Python is no longer required.** If you followed the original project's instructions before, you can ignore anything about installing Python 3 or creating a `venv`; nothing in this fork uses them.
+`ffprobe` on your `PATH` is optional but recommended. It fills in a video's duration when `meta.json` doesn't declare one; without it those entries just show an unknown duration.
+
+**Python is no longer required.** If you followed the original project's instructions before, you can ignore anything about installing Python 3 or creating a `venv` — the original's Python servers are gone and nothing in the app uses them. The optional `Tools/splitbx.py` helper is the sole exception; see [Tools](#tools).
 
 ## Getting Started
 
@@ -84,7 +86,7 @@ bun run start
 
 Then open <http://localhost:8000>.
 
-`bun.lock` is committed, and `--frozen-lockfile` installs exactly what it pins — so everyone gets the same dependency tree, rather than letting plain `bun install` quietly drift within semver ranges. The launcher and updater scripts do the same thing. (Plain `bun install` is what you want only when you're deliberately changing dependencies and mean to refresh the lockfile.)
+`bun.lock` is committed, and `--frozen-lockfile` installs exactly what it pins — so everyone gets the same dependency tree, rather than letting plain `bun install` quietly drift within semver ranges. The launcher and updater scripts do the same thing, falling back to a plain `bun install` only if the lockfile has drifted out of sync with `package.json`. (That plain form is also what you want when you're deliberately changing dependencies and mean to refresh the lockfile.)
 
 ### Ports
 
@@ -197,6 +199,15 @@ The manager page validates every folder and reports missing video files, missing
 ```
 
 `videos` entries reference video folder names. Use the plain-string form for "play this video with its default path", or the object form to pin a specific `.bx` file when the video has several. Playlists hold no media of their own beyond a thumbnail. Unlike videos, playlists **require** a `meta.json`.
+
+## Tools
+
+Two optional helpers for preparing packages. Neither is part of the app, and you never need them just to run it.
+
+| Script | What it does | Needs |
+|---|---|---|
+| `Tools/splitbx.py` | Splits one `.bx` file into several at the given frame counts — for carving a volume-length path up into per-song files. `python Tools/splitbx.py input.bx 13370 10725 9803 --output-prefix video` | Python 3 |
+| `Tools/offset.sh` | Adds black frames to, or trims frames from, the start of a video, so an existing path lines up. Interactive; detects the framerate itself. | bash, ffmpeg |
 
 ## Updating
 

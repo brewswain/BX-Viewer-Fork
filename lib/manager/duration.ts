@@ -15,7 +15,7 @@ function asObject(value: unknown): Meta | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Meta) : null
 }
 
-/** `shutil.which('ffprobe')`, resolved once per process. */
+/** Locate ffprobe on PATH, resolved once per process. Absence is not an error. */
 let ffprobeResolved: string | null | undefined
 async function whichFfprobe(): Promise<string | null> {
   if (ffprobeResolved !== undefined) return ffprobeResolved
