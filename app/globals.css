@@ -660,6 +660,13 @@ body {
   opacity: 0;
   visibility: hidden;
 }
+/* `opacity`/`visibility` hide the overlay but do NOT stop its animations, so all
+   three spinners kept ticking for the life of the page — enough compositor churn
+   to drop frames in theater mode. Pausing (rather than `display: none`) keeps the
+   fade-out transition above working. */
+.video-overlay[aria-hidden="true"] .video-overlay-spinner {
+  animation-play-state: paused;
+}
 .video-overlay-hint {
   font-size: 0.72rem;
   color: var(--text3);
@@ -1258,6 +1265,11 @@ body {
     border-color 0.15s,
     background 0.15s;
   cursor: pointer;
+  /* The list scrolls a few rows at a time but can hold thousands; skip
+     rendering work for the ones outside the scrollport. The intrinsic size is
+     the measured row height, so the scrollbar stays stable. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 31px;
 }
 
 .marker-list-item:hover {

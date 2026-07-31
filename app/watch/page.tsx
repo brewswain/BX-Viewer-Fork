@@ -711,9 +711,15 @@ function WatchInner() {
               {/* Rows are keyed by source *and* index so switching .bx files
                   remounts them, the way the legacy innerHTML rebuild did —
                   otherwise a reused row could keep a stale `.current` class.
-                  The container itself must stay put: the engine caches it. */}
+                  The container itself must stay put: the engine caches it.
+
+                  Rows render only while this panel is the active tab. A clip
+                  like beryllium has ~4k markers × 6 elements, and the per-frame
+                  `.current` toggle below invalidates style across the whole
+                  subtree — enough to cost ~35ms frames even with the panel
+                  `display: none`. Measured: 135 → 144fps, p99 34.7 → 7.1ms. */}
               <div className="marker-list" id="markerList">
-                {activeMarkers.map((m, i) => (
+                {sidebarTab === 'bx' && activeMarkers.map((m, i) => (
                   <div
                     className="marker-list-item"
                     data-frame={m.frame}
