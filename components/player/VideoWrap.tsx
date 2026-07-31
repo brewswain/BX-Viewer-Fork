@@ -34,6 +34,19 @@ function VideoWrap({
       <video id="mainVideo" preload={preload} ref={videoRef}>
         {videoSrc ? <source src={videoSrc} type="video/mp4" /> : null}
       </video>
+      {/* Play/pause glyph the engine flashes on each toggle; icon is filled in
+          imperatively, so the initial markup is empty. */}
+      <div
+        className="video-tap-indicator"
+        id="videoTapIndicator"
+        aria-hidden="true"
+      >
+        <svg
+          id="videoTapIndicatorIcon"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        ></svg>
+      </div>
       {hasLoadingOverlays && (
         <>
           <div

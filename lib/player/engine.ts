@@ -78,6 +78,10 @@ type FsElement = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void>
 }
 
+/** Shared by the control-bar button and the click-to-toggle flash indicator. */
+const PLAY_GLYPH = `<polygon points="5,3 19,12 5,21"/>`
+const PAUSE_GLYPH = `<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>`
+
 /** Elements the engine owns are required — a missing id is a programming error. */
 function byId<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T
@@ -122,6 +126,8 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
   const speedSliderEl = byId<HTMLInputElement>('speedSlider')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
+  const tapIndicator = byId<HTMLElement>('videoTapIndicator')
+  const tapIndicatorIcon = byId<HTMLElement>('videoTapIndicatorIcon') // <svg>
 
   const COLORS = buildColors(userSettings)
 
@@ -623,22 +629,40 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   })
 
   // ── Playback controls ───────────────────────────────────────────────────────
+  /**
+   * YouTube-style flash: the glyph for the state just entered, scaled up and
+   * faded out. Driven from togglePlay rather than the video's play/pause events
+   * because the seek handler pauses and resumes internally — that must not
+   * flash. Removing the class and reading offsetWidth restarts the animation
+   * when clicks come faster than it runs.
+   */
+  function flashTapIndicator(playing: boolean) {
+    tapIndicatorIcon.innerHTML = playing ? PLAY_GLYPH : PAUSE_GLYPH
+    tapIndicator.classList.toggle('is-play', playing)
+    tapIndicator.classList.remove('flash')
+    void tapIndicator.offsetWidth
+    tapIndicator.classList.add('flash')
+  }
+
   function togglePlay() {
-    if (video.paused) video.play()
+    const willPlay = video.paused
+    if (willPlay) video.play()
     else video.pause()
+    flashTapIndicator(willPlay)
   }
 
   on(btnPlay, 'click', togglePlay)
+  on(video, 'click', togglePlay)
 
   on(video, 'play', () => {
-    playIcon.innerHTML = `<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>`
+    playIcon.innerHTML = PAUSE_GLYPH
     playIcon.setAttribute('fill', 'currentColor')
   })
   on(video, 'pause', () => {
-    playIcon.innerHTML = `<polygon points="5,3 19,12 5,21"/>`
+    playIcon.innerHTML = PLAY_GLYPH
   })
   on(video, 'ended', () => {
-    playIcon.innerHTML = `<polygon points="5,3 19,12 5,21"/>`
+    playIcon.innerHTML = PLAY_GLYPH
     if (onEnded) onEnded()
   })
 
