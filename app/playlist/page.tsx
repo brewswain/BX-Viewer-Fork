@@ -10,9 +10,10 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 
 import DevicePanel from '@/components/player/DevicePanel'
+import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
 import VideoWrap from '@/components/player/VideoWrap'
@@ -33,6 +34,7 @@ import type {
   PlaylistMeta,
   VideoMeta,
 } from '@/lib/player/types'
+import type { OssmItem } from '@/lib/ossm/types'
 import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
 
 type TrackMeta = VideoMeta & { _folder: string; _bxFile: string | null }
@@ -54,6 +56,20 @@ function LoadingLayout({ text }: { text: string }) {
   )
 }
 
+/**
+ * The .bx a track loads when the user hasn't picked a variant: per-entry
+ * playlist override → first listed variant → legacy single-file field. Shared by
+ * the player and the OSSM export so the two can't disagree about what's playing.
+ */
+function defaultBxFile(meta: TrackMeta): string | null {
+  return (
+    meta._bxFile ||
+    (meta.bxFiles && meta.bxFiles[0] ? meta.bxFiles[0].file : null) ||
+    meta.bxFile ||
+    null
+  )
+}
+
 function descriptionParagraphs(meta: VideoMeta | undefined): string[] {
   if (!meta || !meta.description) return []
   return Array.isArray(meta.description) ? meta.description : [meta.description]
@@ -68,6 +84,12 @@ function PlaylistInner() {
   const [emptyPlaylist, setEmptyPlaylist] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [bxSelect, setBxSelect] = useState<BxSelectState>(null)
+  // The user's variant picks, keyed by track index. Recorded rather than left in
+  // the dropdown so a revisited track keeps its pick and the OSSM export sends
+  // the paths that were actually played. The ref is what `loadTrack` reads: it
+  // lives inside an effect that deliberately doesn't re-run on state changes.
+  const [bxOverrides, setBxOverrides] = useState<Record<number, string>>({})
+  const bxOverridesRef = useRef<Record<number, string>>({})
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -87,6 +109,8 @@ function PlaylistInner() {
     setEmptyPlaylist(false)
     setCurrentIndex(0)
     setBxSelect(null)
+    bxOverridesRef.current = {}
+    setBxOverrides({})
 
     async function loadPlaylist(id: string) {
       try {
@@ -186,11 +210,8 @@ function PlaylistInner() {
       if (activeEl)
         activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 
-      // Determine which bx file to load: per-entry override → first bxFiles entry → bxFile
-      const bxFileToLoad =
-        meta._bxFile ||
-        (meta.bxFiles && meta.bxFiles[0] ? meta.bxFiles[0].file : null) ||
-        meta.bxFile
+      // The user's own pick for this track wins over the meta-derived default.
+      const bxFileToLoad = bxOverridesRef.current[index] ?? defaultBxFile(meta)
 
       let newPath: Float32Array
       let newEffects: BxEffect[] = []
@@ -266,6 +287,13 @@ function PlaylistInner() {
     if (!state) return
     const b = state.options[idx]
     const frames = trackFramesRef.current
+    // Record the pick before loading: the export should follow the dropdown even
+    // if this .bx turns out to be unparseable.
+    bxOverridesRef.current = {
+      ...bxOverridesRef.current,
+      [state.trackIndex]: b.file,
+    }
+    setBxOverrides(bxOverridesRef.current)
     try {
       const rawSel = await fetchText(
         `${VIDEO_BASE}/${encodeURIComponent(state.folder)}/${encodeURIComponent(b.file)}`,
@@ -283,6 +311,15 @@ function PlaylistInner() {
       console.warn('Could not load bx file:', err)
     }
   }
+
+  // Tracks with no resolvable .bx are dropped — there is no path to export.
+  const ossmItems = useMemo<OssmItem[]>(() => {
+    if (!loaded) return []
+    return loaded.metas.flatMap((m, i) => {
+      const bxFile = bxOverrides[i] ?? defaultBxFile(m)
+      return bxFile ? [{ videoId: m._folder, bxFile }] : []
+    })
+  }, [loaded, bxOverrides])
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -494,6 +531,12 @@ function PlaylistInner() {
               })}
             </div>
           </div>
+
+          <OssmExportPanel
+            items={ossmItems}
+            playlistTitle={playlist.title || id}
+            bundleName={playlist.title || id}
+          />
         </aside>
       </div>
     </>

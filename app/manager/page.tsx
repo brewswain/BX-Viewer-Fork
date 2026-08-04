@@ -13,6 +13,9 @@ import CreateVideoOverlay, {
   type VideoOverlayApi,
 } from '@/components/manager/CreateVideoOverlay'
 import MetaPanel, { type MetaContext } from '@/components/manager/MetaPanel'
+import OssmExportOverlay, {
+  type OssmExportOverlayApi,
+} from '@/components/manager/OssmExportOverlay'
 import {
   ConfirmDialog,
   DropOverlay,
@@ -63,6 +66,7 @@ export default function ManagerPage() {
   const videoOverlay = useRef<VideoOverlayApi | null>(null)
   const playlistOverlay = useRef<PlaylistOverlayApi | null>(null)
   const exportOverlay = useRef<ExportOverlayApi | null>(null)
+  const ossmOverlay = useRef<OssmExportOverlayApi | null>(null)
 
   // ── Toast ──────────────────────────────────────────────────────────────────
 
@@ -266,6 +270,7 @@ export default function ManagerPage() {
         setMetaContext(null)
         playlistOverlay.current?.close()
         exportOverlay.current?.close()
+        ossmOverlay.current?.close()
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -529,6 +534,22 @@ export default function ManagerPage() {
               Create package…
             </button>
             <button
+              className="create-export-btn"
+              onClick={() => ossmOverlay.current?.open()}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+              Export to OSSM…
+            </button>
+            <button
               className="import-btn"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -611,6 +632,8 @@ export default function ManagerPage() {
       />
 
       <CreateExportOverlay api={exportOverlay} showToast={showToast} />
+
+      <OssmExportOverlay api={ossmOverlay} showToast={showToast} />
 
       <CreatePlaylistOverlay
         api={playlistOverlay}

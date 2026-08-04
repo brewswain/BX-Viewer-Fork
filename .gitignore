@@ -4,6 +4,10 @@ playlists/*
 # Import staging dir — removed in a `finally`, so this only catches a hard crash.
 .tmp-import-*
 
+# Test fixtures. Kept in the repo rather than %TEMP% because that is on the
+# system volume, where Defender scans every new file (~0.5s each here).
+.tmp-test-*
+
 # Next.js / bun
 node_modules/
 .next/

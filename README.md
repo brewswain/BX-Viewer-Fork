@@ -31,6 +31,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 🪄 Effects: Able to render special effects from paths created with [BX-Editor-FX](https://github.com/Alunacoz/BX-Editor-FX)!
 - 🎸 DH Mode: Don't like waveforms? Automatically (but not perfectly!) convert .bx paths into simple circles in the settings!
 - 🕹️ Device Output: Drive an OSSM — or any Buttplug device with positional control — straight from the `.bx` path, in sync with the video. Connects through [Intiface Central](https://intiface.com/central/) or to [OSSM Sauce](https://github.com/clbhundley/OSSM-Sauce) directly. See [docs/device-output.md](docs/device-output.md).
+- 📤 Export to OSSM Sauce: Send a video's `.bx` paths — or a whole playlist, in order — straight into the [OSSM Sauce](https://github.com/clbhundley/OSSM-Sauce) app's own `Paths/` and `Playlists/` folders, or download them as a zip. Nothing is ever overwritten. See [docs/ossm-export.md](docs/ossm-export.md).
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Example Screenshots

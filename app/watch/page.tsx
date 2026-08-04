@@ -14,6 +14,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 
 import DevicePanel from '@/components/player/DevicePanel'
+import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
 import VideoWrap from '@/components/player/VideoWrap'
@@ -35,6 +36,7 @@ import {
   renderDescription,
 } from '@/lib/player/format'
 import type { BxSource, Marker, VideoMeta } from '@/lib/player/types'
+import type { OssmItem } from '@/lib/ossm/types'
 import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
 
 type Loaded = {
@@ -196,6 +198,13 @@ function WatchInner() {
     [loaded, activeBxIndex],
   )
   activeMarkersRef.current = activeMarkers
+
+  // Follows the .bx dropdown: exporting a variant the user isn't watching would
+  // be silently wrong.
+  const ossmItems = useMemo<OssmItem[]>(() => {
+    const file = loaded?.bxSources[activeBxIndex]?.file
+    return loaded && file ? [{ videoId: loaded.id, bxFile: file }] : []
+  }, [loaded, activeBxIndex])
 
   // ── Device output ───────────────────────────────────────────────────────────
   // Settings are read on load, the same way the engine consumes them. The
@@ -746,6 +755,13 @@ function WatchInner() {
                 </div>
               </div>
             </div>
+
+            {/* Paths-only: a single video is not a playlist, so no .bxpl. */}
+            <OssmExportPanel
+              items={ossmItems}
+              bundleName={meta.title || id}
+              compact
+            />
 
             <div className="sidebar-section">
               <div className="sidebar-title" id="markerListTitle">

@@ -4815,3 +4815,128 @@ body:has(.manager-layout) {
   border-radius: var(--radius);
   color: var(--text);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   OSSM Sauce export (player sidebar)
+   Buttons reuse .device-btn so the two sidebar panels stay visually identical.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.ossm-note {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text2);
+  margin-bottom: 0.6rem;
+}
+.ossm-note-error {
+  color: var(--red);
+}
+/* Advisory, not a failure: renames and "no folder found" both land here. */
+.ossm-note-warn {
+  color: var(--text2);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
+}
+
+.ossm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ossm-plan {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.7rem;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ossm-result {
+  border-color: var(--teal);
+}
+
+.ossm-plan-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.ossm-plan-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+}
+
+.ossm-plan-path {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.ossm-plan-summary {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.ossm-file-list {
+  list-style: none;
+  max-height: 190px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+}
+
+.ossm-file {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.ossm-file:last-child {
+  border-bottom: none;
+}
+
+.ossm-file-name {
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  color: var(--text2);
+  word-break: break-all;
+}
+
+.ossm-file-status {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  border: 1px solid var(--border2);
+  color: var(--text3);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: help;
+}
+.ossm-file-status-new {
+  color: var(--teal);
+  border-color: rgba(61, 214, 200, 0.35);
+  background: var(--teal-glow);
+}
+.ossm-file-status-renamed {
+  color: var(--accent);
+  border-color: rgba(240, 180, 41, 0.35);
+  background: var(--accent-glow);
+}
+
+/* Watch page sidebar is narrower and already dense — trim the plan block. */
+.ossm-panel-compact .ossm-file-list {
+  max-height: 140px;
+}
+.ossm-panel-compact .ossm-plan {
+  padding: 0.5rem 0.55rem;
+}
