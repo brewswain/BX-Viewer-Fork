@@ -1,6 +1,12 @@
 import { jsonError, jsonResponse } from '@/lib/json'
 import { guard } from '@/lib/manager/endpoints'
-import { buildPlan, isLoopbackRequest, OssmRequestError, parseOssmRequest } from '@/lib/ossm/bundle'
+import {
+  buildPlan,
+  isLoopbackRequest,
+  OssmRequestError,
+  parseOssmRequest,
+  toWirePlan,
+} from '@/lib/ossm/bundle'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,7 +22,8 @@ export async function POST(request: Request) {
     if (!parsed.ok) return jsonError(parsed.error, 400)
 
     try {
-      return jsonResponse(await buildPlan(parsed.request, isLoopbackRequest(request)))
+      const plan = await buildPlan(parsed.request, isLoopbackRequest(request))
+      return jsonResponse(toWirePlan(plan))
     } catch (e) {
       if (e instanceof OssmRequestError) return jsonError(e.message, 400)
       throw e

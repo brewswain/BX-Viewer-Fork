@@ -362,8 +362,10 @@ export async function planFiles(
       stat = await fs.stat(candidate.sourcePath)
       if (!stat.isFile()) throw new Error('not a file')
     } catch {
+      // Names the library entry, not the absolute path: this message is returned
+      // to the browser, which may be another machine on the network.
       throw new Error(
-        `Cannot export "${candidate.sourceFile}": ${candidate.sourcePath} is missing or unreadable.`,
+        `Cannot export "${candidate.sourceFile}" from ${candidate.videoId}: missing or unreadable.`,
       )
     }
     const size = stat.size

@@ -44,6 +44,13 @@ export type OssmPlannedFile = OssmCandidate & {
   bytes: number
 }
 
+/**
+ * A planned file as the browser sees it. `sourcePath` is dropped: an absolute
+ * path on the server is no use to the client, and the manager API is reachable
+ * across the LAN.
+ */
+export type OssmPlanFile = Omit<OssmPlannedFile, 'sourcePath'>
+
 export type OssmTargetSource =
   | 'env' // OSSM_SAUCE_DIR
   | 'config' // config.json → ossmSauceDir
@@ -68,10 +75,16 @@ export type OssmPlan = {
    * viewer's. A guard against a confusing outcome, not a security boundary.
    */
   canInstall: boolean
-  files: OssmPlannedFile[]
+  files: OssmPlanFile[]
   playlist: { name: string; lines: string[] } | null
   warnings: string[]
 }
+
+/**
+ * The same plan before it is serialised: the install route still needs the
+ * source paths to copy from.
+ */
+export type OssmServerPlan = Omit<OssmPlan, 'files'> & { files: OssmPlannedFile[] }
 
 export type OssmInstallResult = {
   dir: string

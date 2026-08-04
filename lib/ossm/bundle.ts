@@ -14,7 +14,14 @@ import { bxFilesOf, type VideoMeta } from '@/lib/manager-client'
 import { isValidId, safeJoin, VIDEO_BASE } from '@/lib/paths'
 import { bxplBody, ossmPathName, sanitizeBxplName, suffixName } from './naming'
 import { planFiles, resolveOssmTarget } from './storage'
-import type { OssmCandidate, OssmItem, OssmPlan, OssmPlannedFile, OssmRequest } from './types'
+import type {
+  OssmCandidate,
+  OssmItem,
+  OssmPlan,
+  OssmPlannedFile,
+  OssmRequest,
+  OssmServerPlan,
+} from './types'
 
 /**
  * A malformed request, as opposed to a broken library entry — those only warn.
@@ -283,7 +290,10 @@ export function playlistFor(
  * rather than trusting a client-supplied plan. Read-only: it inspects `Paths/`
  * but never creates the target folders.
  */
-export async function buildPlan(request: OssmRequest, canInstall: boolean): Promise<OssmPlan> {
+export async function buildPlan(
+  request: OssmRequest,
+  canInstall: boolean,
+): Promise<OssmServerPlan> {
   const target = await resolveOssmTarget()
   const { candidates, warnings } = await buildCandidates(request.items)
   const files = await planFiles(target, candidates)
@@ -293,5 +303,26 @@ export async function buildPlan(request: OssmRequest, canInstall: boolean): Prom
     files,
     playlist: playlistFor(request, files),
     warnings,
+  }
+}
+
+/**
+ * Strip the server-only fields before a plan is serialised. Written out field by
+ * field rather than by omission, so a field added to `OssmPlannedFile` later has
+ * to be opted in to the response instead of leaking by default.
+ */
+export function toWirePlan(plan: OssmServerPlan): OssmPlan {
+  return {
+    target: plan.target,
+    canInstall: plan.canInstall,
+    playlist: plan.playlist,
+    warnings: plan.warnings,
+    files: plan.files.map((f) => ({
+      videoId: f.videoId,
+      sourceFile: f.sourceFile,
+      name: f.name,
+      status: f.status,
+      bytes: f.bytes,
+    })),
   }
 }
