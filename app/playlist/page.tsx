@@ -12,16 +12,19 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useRef, useState } from 'react'
 
+import DevicePanel from '@/components/player/DevicePanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
 import VideoWrap from '@/components/player/VideoWrap'
+import { deviceManager } from '@/lib/device/manager'
 import {
   buildPath,
   loadEffectFonts,
+  markersFromData,
   parseBx,
   peaksFromMarkerData,
 } from '@/lib/player/bx'
-import { PLAYLIST_BASE, VIDEO_BASE } from '@/lib/player/constants'
+import { FPS, PLAYLIST_BASE, VIDEO_BASE } from '@/lib/player/constants'
 import { createPlayerEngine, type PlayerEngine } from '@/lib/player/engine'
 import { fetchJSON, fetchText, framesToTimecode, renderDescription } from '@/lib/player/format'
 import type {
@@ -30,7 +33,7 @@ import type {
   PlaylistMeta,
   VideoMeta,
 } from '@/lib/player/types'
-import { getSettings } from '@/lib/settings'
+import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
 
 type TrackMeta = VideoMeta & { _folder: string; _bxFile: string | null }
 
@@ -143,14 +146,29 @@ function PlaylistInner() {
     const userSettings = getSettings()
     let trackIndex = 0
 
+    const deviceConfig = deviceConfigFromSettings(userSettings)
+    deviceManager.configure(deviceConfig)
+    if (deviceConfig.enabled && deviceConfig.autoConnect) {
+      void deviceManager.connect()
+    }
+
     const engine = createPlayerEngine({
       video,
       canvas,
       bxWrap,
       userSettings,
+      autoTheater: true,
       onEnded() {
         // Auto-advance to next track
         if (trackIndex < metas.length - 1) loadTrack(trackIndex + 1)
+      },
+      onFrame(curFrame) {
+        // Same contract as the watch page: `curFrame` is already smoothed and
+        // offset-corrected, and the driver is a no-op when nothing is due.
+        deviceManager.tick(
+          (curFrame / FPS) * 1000,
+          !video!.paused && !video!.ended && video!.readyState >= 2,
+        )
       },
     })
     engineRef.current = engine
@@ -191,9 +209,13 @@ function PlaylistInner() {
         newEffects = effects
         await loadEffectFonts(effects, folder)
         newPeaks = peaksFromMarkerData(markerData)
+        deviceManager.setMarkers(markersFromData(markerData))
       } catch (e) {
         console.warn('Could not load bx file:', e)
         newPath = new Float32Array(newTotalFrames).fill(0)
+        // A track with no usable path must not leave the previous track's plan
+        // running against the new video.
+        deviceManager.clearMarkers()
       }
 
       engine.loadBxData(newPath, newTotalFrames, newEffects, newPeaks)
@@ -233,6 +255,8 @@ function PlaylistInner() {
       engine.destroy()
       engineRef.current = null
       loadTrackRef.current = null
+      // The manager outlives this page; leaving it must stop the machine.
+      deviceManager.clearMarkers()
     }
   }, [loaded])
 
@@ -254,6 +278,7 @@ function PlaylistInner() {
         effects,
         peaksSel,
       )
+      deviceManager.setMarkers(markersFromData(markerData))
     } catch (err) {
       console.warn('Could not load bx file:', err)
     }
@@ -413,6 +438,8 @@ function PlaylistInner() {
         </div>
 
         <aside className="player-sidebar">
+          <DevicePanel />
+
           <div className="sidebar-section">
             <div className="sidebar-title">
               {`${playlist.title || 'Playlist'} — ${metas.length} videos`}

@@ -7,7 +7,9 @@
     "dev": "bun run scripts/bump-sw.ts && bun run scripts/next.ts dev",
     "build": "bun run scripts/bump-sw.ts && bun run scripts/next.ts build",
     "start": "bun run scripts/next.ts start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "sim": "bun run scripts/buttplug-sim.ts"
   },
   "dependencies": {
     "archiver": "^7.0.1",

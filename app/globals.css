@@ -2309,8 +2309,18 @@ body.theater-mode {
   cursor: none;
 }
 
+/* The controls only answer the bottom edge, so the pointer is the only feedback
+   a mouse move gets elsewhere on the picture. The engine drops `pointer-active`
+   again once the mouse has been still for a moment. */
+body.theater-mode.pointer-active,
 body.theater-mode #playerContainer.controls-visible {
   cursor: default;
+}
+
+/* `.player-video-wrap video` sets its own cursor, so body's `cursor: none` never
+   reaches the picture — the element it covers in theater. */
+body.theater-mode:not(.pointer-active) .player-video-wrap video {
+  cursor: none;
 }
 
 /* Hide everything outside the player */
@@ -4581,4 +4591,227 @@ body:has(.manager-layout) {
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Device Panel (player sidebar)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.device-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.device-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+  flex-shrink: 0;
+}
+.device-dot-connected {
+  background: var(--teal);
+}
+.device-dot-connecting {
+  background: var(--accent);
+  animation: device-pulse 1s ease-in-out infinite;
+}
+.device-dot-error {
+  background: var(--red);
+}
+/* Armed = connected, enabled and a plan loaded: the only state in which the
+   machine can actually move. Worth its own colour. */
+.device-dot-armed {
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-glow);
+  animation: device-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes device-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.device-status-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.device-status-label {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.device-status-target {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text3);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+
+.device-detail {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text2);
+  margin-bottom: 0.6rem;
+}
+.device-detail-error {
+  color: var(--red);
+}
+.device-detail a {
+  color: var(--accent);
+}
+
+.device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.device-btn {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text2);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.device-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.device-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.device-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.device-meta {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text3);
+  margin-top: 0.6rem;
+}
+
+.device-log-toggle {
+  margin-top: 0.6rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text3);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.device-log-toggle:hover {
+  color: var(--text2);
+}
+
+.device-log {
+  margin-top: 0.5rem;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+}
+
+.device-log-line {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  line-height: 1.5;
+  color: var(--text2);
+  word-break: break-word;
+}
+
+/* ── Settings page: device section extras ── */
+.settings-device-note {
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.9rem;
+}
+.settings-device-note ol {
+  margin: 0.4rem 0 0 1.1rem;
+}
+.settings-device-note li {
+  margin-bottom: 0.25rem;
+}
+.settings-device-note code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  color: var(--accent);
+}
+
+.settings-text {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  min-width: 0;
+  flex: 1;
+}
+.settings-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-number {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  width: 8ch;
+}
+.settings-number:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-select {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
 }

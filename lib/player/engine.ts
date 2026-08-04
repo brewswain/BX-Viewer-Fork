@@ -38,6 +38,12 @@ export type PlayerEngineOptions = {
   userSettings: Partial<Settings>
   /** Seconds before the path starts (default 0). */
   offsetSecs?: number
+  /**
+   * Honour the persisted `defaultTheater` setting on startup. Opt-in per page
+   * rather than automatic, so a host that has no business starting immersive
+   * (a preview, an embed) does not have to fight the setting.
+   */
+  autoTheater?: boolean
   /** Video ended (playlist: advance track). */
   onEnded?: () => void
   /** Every rAF with the current integer frame + depth. */
@@ -145,6 +151,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let seekingLongTimer: ReturnType<typeof setTimeout> | null = null
   let scrubbing = false
   let hideControlsTimer: ReturnType<typeof setTimeout> | null = null
+  let cursorTimer: ReturnType<typeof setTimeout> | null = null
   let isTheater = false
 
   // Teardown bookkeeping (not part of the legacy engine)
@@ -211,10 +218,34 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     return !!(d.fullscreenElement || d.webkitFullscreenElement)
   }
 
+  /**
+   * Height the picture cannot use when it is scaled to the full window width —
+   * the black bar a video wider than the window leaves behind. 0 when the video
+   * is the taller of the two, which is the usual case on a 16:9 screen.
+   */
+  function letterboxSlack(): number {
+    const vw = video.videoWidth
+    const vh = video.videoHeight
+    if (!vw || !vh) return 0
+    const fitted = Math.min(window.innerHeight, (window.innerWidth * vh) / vw)
+    return Math.max(0, window.innerHeight - fitted)
+  }
+
+  /** Reference height the zoom slider scales the waveform against. */
   function getOverlayRefHeight(): number {
-    return isFullscreen() || isTheater
-      ? Math.round(window.innerHeight * 0.35)
-      : BX_HEIGHT_OVERLAY
+    if (isFullscreen()) return Math.round(window.innerHeight * 0.35)
+    // Theater keeps the strip in the layout, so every pixel it takes is a pixel
+    // off the picture. Spend the letterbox slack first — that part is free —
+    // and fall back to the ordinary compact strip when there is none.
+    if (isTheater) {
+      return Math.round(
+        Math.min(
+          Math.max(letterboxSlack(), BX_HEIGHT_OVERLAY),
+          window.innerHeight * 0.35,
+        ),
+      )
+    }
+    return BX_HEIGHT_OVERLAY
   }
 
   function resizeCanvas() {
@@ -763,6 +794,13 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     on(video, evt, scheduleFrame)
   }
 
+  // The theater strip is sized from the video's own aspect ratio, so it has to
+  // be recomputed as soon as the intrinsic dimensions are known — and again on
+  // `resize`, which fires when a playlist swaps in a differently shaped track.
+  for (const evt of ['loadedmetadata', 'resize']) {
+    on(video, evt, () => resizeCanvas())
+  }
+
   if (onCanPlay) on(video, 'canplay', onCanPlay)
   if (onWaiting) on(video, 'waiting', onWaiting)
   if (onPlaying) on(video, 'playing', onPlaying)
@@ -846,20 +884,53 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     return isFullscreen() || isTheater
   }
 
-  function showControls() {
+  /**
+   * `sticky` leaves the controls up with no auto-hide timer: theater keeps them
+   * visible for as long as the pointer stays in the bottom strip, and hides them
+   * the moment it leaves.
+   */
+  function showControls(sticky = false) {
     const container = byId<HTMLElement>('playerContainer')
     const controls = container.querySelector('.player-controls')
     container.classList.add('controls-visible')
     if (controls) controls.classList.add('controls-visible')
     anchorOverlay()
     if (hideControlsTimer) clearTimeout(hideControlsTimer)
+    if (sticky) return
     hideControlsTimer = setTimeout(() => {
-      if (isImmersive()) {
-        container.classList.remove('controls-visible')
-        if (controls) controls.classList.remove('controls-visible')
-        anchorOverlay()
-      }
+      if (isImmersive()) hideControls()
     }, 1000)
+  }
+
+  function hideControls() {
+    if (hideControlsTimer) clearTimeout(hideControlsTimer)
+    const container = byId<HTMLElement>('playerContainer')
+    const controls = container.querySelector('.player-controls')
+    container.classList.remove('controls-visible')
+    if (controls) controls.classList.remove('controls-visible')
+    anchorOverlay()
+  }
+
+  /** Show the pointer while it is moving, then let theater swallow it again. */
+  function wakeCursor() {
+    document.body.classList.add('pointer-active')
+    if (cursorTimer) clearTimeout(cursorTimer)
+    cursorTimer = setTimeout(() => {
+      document.body.classList.remove('pointer-active')
+    }, 1500)
+  }
+
+  /**
+   * How close to the bottom edge the pointer has to be for theater to raise the
+   * controls. Always at least the height of the control bar itself, or moving
+   * onto the bar it just revealed would dismiss it.
+   */
+  function theaterControlsZone(): number {
+    const controls = byId<HTMLElement>('playerContainer').querySelector(
+      '.player-controls',
+    )
+    const barH = controls ? controls.getBoundingClientRect().height : 0
+    return Math.max(120, Math.round(barH) + 24)
   }
 
   function onEnterFullscreen() {
@@ -924,13 +995,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   function exitTheater() {
     isTheater = false
-    document.body.classList.remove('theater-mode')
+    if (cursorTimer) clearTimeout(cursorTimer)
+    document.body.classList.remove('theater-mode', 'pointer-active')
     if (btnTheater) btnTheater.classList.remove('active')
-    if (hideControlsTimer) clearTimeout(hideControlsTimer)
-    const container = byId<HTMLElement>('playerContainer')
-    const controls = container.querySelector('.player-controls')
-    container.classList.remove('controls-visible')
-    if (controls) controls.classList.remove('controls-visible')
+    hideControls()
     requestAnimationFrame(() => requestAnimationFrame(() => resizeCanvas()))
   }
 
@@ -956,15 +1024,27 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     }
   })
 
-  on(document, 'mousemove', () => {
-    if (isFullscreen()) showControls()
-    else if (isTheater) showControls()
+  on(document, 'mousemove', (e: MouseEvent) => {
+    if (isFullscreen()) {
+      showControls()
+      return
+    }
+    if (!isTheater) return
+    // The controls stay down, but the pointer itself still has to come back or
+    // there is no feedback at all for moving the mouse.
+    wakeCursor()
+    // Theater treats the control bar as a bottom-edge affordance rather than a
+    // hover-anywhere one: moving over the picture leaves it alone.
+    if (window.innerHeight - e.clientY <= theaterControlsZone()) showControls(true)
+    else hideControls()
   })
   on(
     document,
     'touchstart',
     () => {
-      if (isFullscreen()) showControls()
+      // No pointer to put in the bottom strip on touch, so a tap anywhere does
+      // it — and then the ordinary auto-hide takes over.
+      if (isFullscreen() || isTheater) showControls()
     },
     { passive: true },
   )
@@ -974,6 +1054,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   resizeObserver.observe(bxWrap)
   resizeCanvas()
   scheduleFrame()
+
+  // Theater is the default way to watch; the setting is the opt-out.
+  if (opts.autoTheater && userSettings.defaultTheater !== false) enterTheater()
 
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
@@ -1020,9 +1103,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       resizeObserver.disconnect()
       if (seekingLongTimer) clearTimeout(seekingLongTimer)
       if (hideControlsTimer) clearTimeout(hideControlsTimer)
+      if (cursorTimer) clearTimeout(cursorTimer)
       for (const fn of cleanups) fn()
       cleanups.length = 0
-      document.body.classList.remove('theater-mode')
+      document.body.classList.remove('theater-mode', 'pointer-active')
     },
   }
 }

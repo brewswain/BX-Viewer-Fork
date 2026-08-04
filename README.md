@@ -19,7 +19,7 @@ This program was written with generative AI, with human intervention as well. I 
 
 - 🎯 Path Synchronization: Automatically syncs BounceX paths to their corresponding videos! Works when scrubbing as well!
 - 🔒 Private & Self-Hosted: Completely private! Host any video you like on your own personal network!
-- 🎭 Theater Mode: Unobstructed viewing experience for maximum immersion!
+- 🎭 Theater Mode: Unobstructed viewing experience for maximum immersion! On by default (`T` or `Esc` leaves it); turn the default off in Settings.
 - 📺 Classic Overlays: Generated on the fly, with the ability to disable the background dim!
 - 🔄 Y-Axis Flip: Need a different perspective? Flip the Y-axis with ease!
 - 📍 Multiple Paths Per Video: Perfect for difficulty selection or different route options!
@@ -30,6 +30,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 🏃 Path Speed Adjustment: Want to slow it down or speed it up? Go ahead!
 - 🪄 Effects: Able to render special effects from paths created with [BX-Editor-FX](https://github.com/Alunacoz/BX-Editor-FX)!
 - 🎸 DH Mode: Don't like waveforms? Automatically (but not perfectly!) convert .bx paths into simple circles in the settings!
+- 🕹️ Device Output: Drive an OSSM — or any Buttplug device with positional control — straight from the `.bx` path, in sync with the video. Connects through [Intiface Central](https://intiface.com/central/) or to [OSSM Sauce](https://github.com/clbhundley/OSSM-Sauce) directly. See [docs/device-output.md](docs/device-output.md).
 - 🚀 More to Come: Stay tuned for additional features and improvements!
 
 ## Example Screenshots
@@ -210,6 +211,13 @@ Two optional helpers for preparing packages. Neither is part of the app, and you
 |---|---|---|
 | `Tools/splitbx.py` | Splits one `.bx` file into several at the given frame counts — for carving a volume-length path up into per-song files. `python Tools/splitbx.py input.bx 13370 10725 9803 --output-prefix video` | Python 3 |
 | `Tools/offset.sh` | Adds black frames to, or trims frames from, the start of a video, so an existing path lines up. Interactive; detects the framerate itself. | bash, ffmpeg |
+
+There is also `bun run sim`, a fake Buttplug server that prints every move it is
+sent — for setting up or debugging device output with no hardware attached. See
+[docs/device-output.md](docs/device-output.md).
+
+`bun test` runs the device-output test suite (planner, scheduler, wire protocol
+and the whole chain end to end). It needs no hardware and no network.
 
 ## Updating
 

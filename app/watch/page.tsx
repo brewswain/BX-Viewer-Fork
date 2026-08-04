@@ -13,9 +13,11 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 
+import DevicePanel from '@/components/player/DevicePanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
 import VideoWrap from '@/components/player/VideoWrap'
+import { deviceManager } from '@/lib/device/manager'
 import {
   buildPath,
   findPeaks,
@@ -33,7 +35,7 @@ import {
   renderDescription,
 } from '@/lib/player/format'
 import type { BxSource, Marker, VideoMeta } from '@/lib/player/types'
-import { getSettings } from '@/lib/settings'
+import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
 
 type Loaded = {
   id: string
@@ -195,6 +197,32 @@ function WatchInner() {
   )
   activeMarkersRef.current = activeMarkers
 
+  // ── Device output ───────────────────────────────────────────────────────────
+  // Settings are read on load, the same way the engine consumes them. The
+  // manager owns the socket and outlives this page, so all that happens here is
+  // handing over the plan for the selected .bx and refreshing the mapping.
+  useEffect(() => {
+    const config = deviceConfigFromSettings(getSettings())
+    deviceManager.configure(config)
+    if (activeMarkers.length >= 2) deviceManager.setMarkers(activeMarkers)
+    else deviceManager.clearMarkers()
+    if (config.enabled && config.autoConnect && !deviceManager.isConnected()) {
+      void deviceManager.connect()
+    }
+  }, [activeMarkers])
+
+  // Navigating away must stop the machine, even though the socket stays up.
+  useEffect(() => () => deviceManager.clearMarkers(), [])
+
+  // The device panel lives in the BX tab, which is not the default one. Open it
+  // for people who have output switched on, so the connect button is reachable
+  // without having to know where it lives. Deliberately an effect rather than a
+  // seeded initial state: localStorage is client-only and would desync
+  // hydration.
+  useEffect(() => {
+    if (loaded && getSettings().deviceEnabled) setSidebarTab('bx')
+  }, [loaded])
+
   // ── Engine + single-video overlays ──────────────────────────────────────────
   useEffect(() => {
     if (!loaded) return
@@ -320,6 +348,18 @@ function WatchInner() {
 
     // ── Per-frame callback: update sidebar stats + marker highlight ───────────
     function onFrame(curFrame: number, curDepth: number) {
+      // Device first, and unconditionally: `curFrame` is the engine's smoothed
+      // position with the video's own path offset already applied, which makes
+      // it a better clock than `video.currentTime`. The driver is O(1) when
+      // nothing is due, so this is safe on a callback that runs every rAF.
+      // Pausing stops the machine on the one frame the engine schedules for the
+      // `pause` event before its loop goes idle. `paused` covers scrubbing too:
+      // the engine pauses the video for the duration of a seek.
+      deviceManager.tick(
+        (curFrame / FPS) * 1000,
+        !video!.paused && !video!.ended && video!.readyState >= 2,
+      )
+
       if (curFrameEl) curFrameEl.textContent = String(curFrame)
       if (curDepthEl) curDepthEl.textContent = curDepth.toFixed(3)
 
@@ -348,6 +388,7 @@ function WatchInner() {
       bxWrap,
       userSettings,
       offsetSecs: typeof meta.offset === 'number' ? meta.offset / 1000 : 0,
+      autoTheater: true,
       onSeeking,
       onSeeked,
       onCanPlay,
@@ -670,6 +711,8 @@ function WatchInner() {
             }
             id="sidebarPanelBx"
           >
+            <DevicePanel />
+
             <div className="sidebar-section">
               <div className="sidebar-title">Stats</div>
               <div className="bx-stats-grid">
