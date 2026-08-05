@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import {
+  checkOssmApp,
+  resolveOssmAppUrl,
+  sendOssmPayload,
+  sendOssmPlaylist,
+  summarizeSend,
+} from '@/lib/ossm/app'
+import {
   downloadOssmBundle,
+  fetchOssmPayload,
   installOssmExport,
   planOssmExport,
   summarizePlan,
@@ -14,15 +22,26 @@ import type {
   OssmItem,
   OssmPlan,
   OssmRequest,
+  OssmSendResult,
 } from '@/lib/ossm/types'
+import { getSettings, setSettings } from '@/lib/settings'
 
 /**
  * "Send this to OSSM Sauce" for the player sidebar.
  *
- * Two ways out: a zip shaped to extract over `<Documents>/OSSM Sauce/`, or a
- * direct install when the browser and the server are the same machine. Install
- * always goes through a plan first — it writes into the user's Documents
- * folder, and the plan is the only thing that makes that reviewable.
+ * Three ways out:
+ *
+ *  - **Download** a zip shaped to extract over `<Documents>/OSSM Sauce/`;
+ *  - **Install**, which writes into that folder directly — but on the machine
+ *    running the *server*, so it is offered only on loopback;
+ *  - **Send to the app**, which posts the content to OSSM Sauce's own HTTP
+ *    server from this browser (`lib/ossm/app.ts`). That is the one that works
+ *    from a phone, and the one that survives a custom paths folder, because the
+ *    app does the write and picks the folder itself.
+ *
+ * Install always goes through a plan first — it writes into the user's Documents
+ * folder, and the plan is the only thing that makes that reviewable. Send needs
+ * no plan: the app answers with what it did to each file.
  */
 
 type Props = {
@@ -36,7 +55,7 @@ type Props = {
   compact?: boolean
 }
 
-type Busy = 'download' | 'plan' | 'install' | null
+type Busy = 'download' | 'plan' | 'install' | 'send' | 'check' | 'replace' | null
 
 const STATUS_LABEL: Record<OssmFileStatus, string> = {
   new: 'new',
@@ -63,6 +82,15 @@ export default function OssmExportPanel({
   const [plan, setPlan] = useState<OssmPlan | null>(null)
   const [result, setResult] = useState<OssmInstallResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Empty until the effect below runs: the default is derived from
+  // `window.location`, so rendering it on the server would hydrate wrong.
+  const [appUrl, setAppUrl] = useState('')
+  const [checked, setChecked] = useState<string | null>(null)
+  const [send, setSend] = useState<OssmSendResult | null>(null)
+
+  useEffect(() => {
+    setAppUrl(resolveOssmAppUrl(getSettings().ossmAppUrl))
+  }, [])
 
   const request = useMemo<OssmRequest>(
     () => ({ items, playlistTitle, bundleName }),
@@ -84,6 +112,7 @@ export default function OssmExportPanel({
   useEffect(() => {
     setPlan(null)
     setResult(null)
+    setSend(null)
     setError(null)
   }, [requestKey])
 
@@ -128,6 +157,57 @@ export default function OssmExportPanel({
     }
   }
 
+  /**
+   * Persist the typed address, normalised, and answer with what the requests
+   * will actually use. Stored per device rather than server-side: the phone's
+   * answer and the desktop's answer are different, and one setting on the
+   * server could only hold one of them.
+   */
+  function commitUrl(): string {
+    const resolved = resolveOssmAppUrl(appUrl)
+    setAppUrl(resolved)
+    setSettings({ ossmAppUrl: appUrl.trim() ? resolved : '' })
+    return resolved
+  }
+
+  async function onCheck() {
+    setBusy('check')
+    setError(null)
+    setChecked(null)
+    const res = await checkOssmApp(commitUrl())
+    setBusy(null)
+    if (res.ok) setChecked(`OSSM Sauce answered at ${res.url}.`)
+    else setError(res.error)
+  }
+
+  async function onSend() {
+    setBusy('send')
+    setError(null)
+    setChecked(null)
+    setSend(null)
+    const url = commitUrl()
+    try {
+      const payload = await fetchOssmPayload(request)
+      // `replace` is left off: the app refuses with 409 if the queue is not
+      // empty, and that refusal is the user's only chance to object.
+      setSend(await sendOssmPayload(payload, url))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Only after the user has been asked — a 409 means something may be playing. */
+  async function onReplaceQueue() {
+    if (!send) return
+    setBusy('replace')
+    setError(null)
+    const playlist = await sendOssmPlaylist(send.url, send.playlistLines, true)
+    setSend({ ...send, playlist })
+    setBusy(null)
+  }
+
   const renamedCount = plan?.files.filter((f) => f.status === 'renamed').length ?? 0
 
   return (
@@ -158,14 +238,50 @@ export default function OssmExportPanel({
         </button>
         <button
           type="button"
-          className="device-btn device-btn-primary"
+          className="device-btn"
           onClick={onPlan}
           disabled={disabled || plan !== null}
         >
           {busy === 'plan' ? 'Checking…' : 'Install to OSSM Sauce'}
         </button>
+        <button
+          type="button"
+          className="device-btn device-btn-primary"
+          onClick={() => void onSend()}
+          disabled={disabled}
+        >
+          {busy === 'send' ? 'Sending…' : 'Send to the app'}
+        </button>
       </div>
 
+      {/* The app may or may not be on the machine serving this page, so the
+          address is the user's to say — and it is per device. */}
+      <div className="ossm-app-row">
+        <span className="ossm-plan-label">OSSM Sauce app</span>
+        <div className="ossm-app-field">
+          <input
+            className="ossm-app-input"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={`http://…:8081`}
+            value={appUrl}
+            onChange={(e) => setAppUrl(e.target.value)}
+            onBlur={commitUrl}
+          />
+          <button
+            type="button"
+            className="device-btn"
+            onClick={() => void onCheck()}
+            disabled={busy !== null}
+          >
+            {busy === 'check' ? 'Testing…' : 'Test'}
+          </button>
+        </div>
+      </div>
+
+      {checked && <p className="ossm-note ossm-note-ok">{checked}</p>}
       {error && <p className="ossm-note ossm-note-error">{error}</p>}
 
       {plan && (
@@ -264,6 +380,132 @@ export default function OssmExportPanel({
             </ul>
           )}
           {result.warnings.map((w, i) => (
+            <p className="ossm-note ossm-note-warn" key={i}>
+              {w}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {send && (
+        <div
+          className={`ossm-plan${send.files.every((f) => f.stored) && send.playlist.outcome !== 'failed' && send.playlist.outcome !== 'conflict' ? ' ossm-result' : ''}`}
+        >
+          <div className="ossm-plan-row">
+            <span className="ossm-plan-label">Sent to</span>
+            <span className="ossm-plan-path">{send.url}</span>
+          </div>
+          <div className="ossm-plan-summary">{summarizeSend(send)}</div>
+
+          <ul className="ossm-file-list">
+            {send.files.map((f) => {
+              const renamed = !!f.stored && f.stored !== f.requested
+              const status = !f.stored
+                ? 'failed'
+                : f.reused
+                  ? 'identical'
+                  : renamed
+                    ? 'renamed'
+                    : 'new'
+              return (
+                <li className="ossm-file" key={f.requested}>
+                  <span className="ossm-file-name" title={f.error ?? f.requested}>
+                    {f.stored ?? f.requested}
+                  </span>
+                  <span
+                    className={`ossm-file-status ossm-file-status-${status}`}
+                    title={
+                      renamed
+                        ? `A different file already held "${f.requested}", so the app stored this one as "${f.stored}". The playlist points at the new name.`
+                        : f.reused
+                          ? 'The app already had these exact bytes and kept the file it has.'
+                          : (f.error ?? 'Stored in the app’s paths folder.')
+                    }
+                  >
+                    {!f.stored
+                      ? 'failed'
+                      : f.reused
+                        ? 'already there'
+                        : renamed
+                          ? 'renamed'
+                          : 'sent'}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* Per-file failures: which file, not just how many. */}
+          {send.files
+            .filter((f) => f.error)
+            .map((f) => (
+              <p className="ossm-note ossm-note-error" key={f.requested}>
+                {f.error}
+              </p>
+            ))}
+
+          {send.playlist.outcome === 'sent' && (
+            <p className="ossm-note">
+              Playlist loaded — {send.playlist.entries} entr
+              {send.playlist.entries === 1 ? 'y' : 'ies'} in the queue
+              {send.playlist.missing > 0
+                ? `, ${send.playlist.missing} of which the app could not load (a path needs at least 6 markers).`
+                : '.'}
+            </p>
+          )}
+
+          {/* 409. Retrying with replace:true on its own would discard a queue
+              that may be playing, so the app's objection is passed on as-is. */}
+          {send.playlist.outcome === 'conflict' && (
+            <>
+              <p className="ossm-note ossm-note-warn">
+                The paths are in the app, but its queue is not empty:{' '}
+                {send.playlist.error} Replacing it discards whatever is queued now,
+                which may be playing.
+              </p>
+              <div className="ossm-actions">
+                <button
+                  type="button"
+                  className="device-btn device-btn-primary"
+                  onClick={() => void onReplaceQueue()}
+                  disabled={busy !== null}
+                >
+                  {busy === 'replace' ? 'Replacing…' : 'Replace the queue'}
+                </button>
+                <button
+                  type="button"
+                  className="device-btn"
+                  onClick={() =>
+                    setSend({
+                      ...send,
+                      // Clear the 409 text with it: the queue being left alone
+                      // is now the chosen outcome, not a failure to report.
+                      playlist: { ...send.playlist, outcome: 'skipped', error: null },
+                    })
+                  }
+                  disabled={busy !== null}
+                >
+                  Leave it
+                </button>
+              </div>
+            </>
+          )}
+
+          {send.playlist.outcome === 'failed' && (
+            <p className="ossm-note ossm-note-error">
+              The paths are in the app, but the playlist was not loaded:{' '}
+              {send.playlist.error}
+            </p>
+          )}
+
+          {send.playlist.outcome === 'skipped' && (
+            <p className="ossm-note">
+              {send.playlist.error ??
+                'The queue was left as it was — the paths are in the app and can be added by hand.'}
+            </p>
+          )}
+
+          {send.warnings.map((w, i) => (
             <p className="ossm-note ossm-note-warn" key={i}>
               {w}
             </p>

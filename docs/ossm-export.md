@@ -68,9 +68,73 @@ The suffix comes from the new file's own hash, so re-running an export picks the
 same name again rather than piling up copies. An existing `.bxpl` of the same
 name is not replaced either — the export becomes `My List (2).bxpl` and says so.
 
-There is also a **download** option, which packages the same `Paths/` +
-`Playlists/` layout as a zip. Use that when the browser isn't on the machine
-running OSSM Sauce; installing writes to the *server's* Documents folder.
+That is the **install** route, and everything above describes it. There are two
+others — see [The three routes out](#the-three-routes-out).
+
+---
+
+## The three routes out
+
+| Route | Who writes | Works from | API |
+|---|---|---|---|
+| **Download** a zip laid out as `Paths/` + `Playlists/` | the user, by extracting | anywhere | `POST /api/manager/ossm/bundle` |
+| **Install** into the storage folder | this viewer's Node server | only the machine running the server — `isLoopbackRequest` refuses the rest with 403 (`lib/ossm/bundle.ts`) | `POST /api/manager/ossm/plan`, then `/install` |
+| **Send to the app** over its HTTP server | OSSM Sauce itself | anywhere that can reach the app's port | `POST /api/manager/ossm/payload`, then the browser posts to the app |
+
+Install is the odd one out: the viewer is normally served on a LAN port, so a
+phone tapping Install would fill the *server's* Documents folder rather than its
+own. Hence the 403, and hence the third route.
+
+### Send to the app
+
+OSSM Sauce's MCP HTTP server (same port as device output, default **8081**,
+bound to `0.0.0.0`) takes path and playlist *content* and does the write itself:
+
+```
+POST /load_path      {"name": "hopeless-hard.bx", "data_b64": "…", "queue": false}
+  -> {"status":"stored","name":"hopeless-hard (2).bx","reused":false,…}
+POST /load_playlist  {"text": "hopeless-hard (2).bx\n…", "replace": true}
+  -> {"status":"loaded","entries":3,"missing":0,"source":""}
+```
+
+Two consequences fall straight out of the app doing the write:
+
+- **It is immune to `custom_paths_dir`.** The app resolves its own storage
+  folder, so the setting that silently breaks Install (below) cannot apply.
+- **It works from a phone.** The requests go out from the *browser*, never
+  through this viewer's Node server — routing them through Node would put us
+  back on "whose machine is this?". The app is built for it: `OPTIONS` is
+  answered 200 and every response carries `Access-Control-Allow-Origin: *`.
+
+The server's part is `/api/manager/ossm/payload`, which returns the same planned
+export as the zip with each file base64-encoded. It plans like the download and
+not like an install, deliberately: what is already in the app's `Paths/` is the
+app's business, and it answers with the name it chose.
+
+**Read `name` back off every `/load_path` response.** The app never overwrites
+either: identical bytes reuse the file it has (`reused: true`), and a name held
+by *different* bytes is stored as `hopeless-hard (2).bx` — a different
+convention from this side's content-hash suffix, so don't expect the two to
+agree. The `.bxpl` posted afterwards is built from the names that came back
+(`applyStoredNames`, `lib/ossm/app.ts`).
+
+`replace` is left off the first `/load_playlist`. A playlist replaces the queue,
+and the app refuses with **409** when the queue is not empty and the caller
+didn't say it meant to — the one chance the user gets to object, since an HTTP
+caller cannot be prompted down the connection it is waiting on. The UI asks and
+retries; it never silently discards a queue that may be playing. Other answers:
+**400** malformed (and the queue is never touched), **422** stored but wouldn't
+load, **404** no such stored playlist, **503** no paths folder yet, **413** over
+16 MB — per request, so per file.
+
+The app's address is stored **per device** in localStorage (`ossmAppUrl`),
+defaulting to this page's own hostname on port 8081: from
+`http://192.168.1.5:3000` the app is very likely `http://192.168.1.5:8081`. It
+has to be per device — the phone's answer and the desktop's answer are different
+addresses, and a server-side setting could only hold one of them.
+
+Partial success is a real outcome here: files can store and the playlist still
+fail. What landed is reported rather than the whole send being called failed.
 
 ---
 
@@ -139,13 +203,10 @@ Symptom: the playlist appears in Load Playlist, and every entry in it is
 missing. Neither `OSSM_SAUCE_DIR` nor `ossmSauceDir` fixes it; they move the
 whole tree, not just `Paths/`.
 
-Two ways round it, for now: unset the custom folder in the app, or use
-**Download** and extract into the right two places by hand. The app also
-accepts path and playlist *content* over its MCP HTTP server (`/load_path`,
-`/load_playlist`; same port as device output, default 8081) and resolves its own
-storage folder when it writes — so that route is immune by construction. This
-exporter does not use it yet; see `BX-VIEWER-EXPORT-HANDOFF.md` in the OSSM
-Sauce repo for the request and response shapes.
+Use **[Send to the app](#send-to-the-app)** instead: the app resolves its own
+storage folder when it writes, so that route is immune by construction. Failing
+that, unset the custom folder in the app, or use **Download** and extract into
+the right two places by hand.
 
 ---
 

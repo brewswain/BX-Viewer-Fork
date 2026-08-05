@@ -11,7 +11,13 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ROOT } from '@/lib/paths'
-import { buildCandidates, bxplLinesFor, ossmBundleFilename, OssmRequestError } from './bundle'
+import {
+  buildCandidates,
+  buildPayload,
+  bxplLinesFor,
+  ossmBundleFilename,
+  OssmRequestError,
+} from './bundle'
 import type { OssmItem, OssmPlannedFile } from './types'
 
 let base = ''
@@ -42,6 +48,10 @@ beforeAll(async () => {
   // Slugifies to `hope` as well, so it collides with the Hope video.
   await video('Hope!', { bxFiles: [{ label: 'Default', file: 'Other.bx' }] })
   await video('Escapee', { bxFiles: [{ label: 'Default', file: '../Hope/Hope.bx' }] })
+  // `buildPayload` is the only thing here that opens the path files themselves.
+  // `Hopeless/Easy.bx` is deliberately left absent, to exercise the drop.
+  await fs.writeFile(path.join(base, 'Hope', 'Hope.bx'), 'hope-bytes', 'utf8')
+  await fs.writeFile(path.join(base, 'Hopeless', 'Hard.bx'), 'hard-bytes', 'utf8')
 })
 
 afterAll(async () => {
@@ -174,6 +184,52 @@ describe('bxplLinesFor', () => {
     expect(bxplLinesFor(files, [item('Nope', 'Nope.bx'), item('Hope', 'Hope.bx')])).toEqual([
       'hope.bx',
     ])
+  })
+})
+
+describe('buildPayload', () => {
+  test('carries the bytes under the exported name, and no server paths', async () => {
+    const payload = await buildPayload(
+      { items: [item('Hope', 'Hope.bx'), item('Hopeless', 'Hard.bx')], playlistTitle: 'Set' },
+      base,
+    )
+    expect(payload.files.map((f) => f.name)).toEqual(['hope.bx', 'hopeless-hard.bx'])
+    expect(Buffer.from(payload.files[0].dataB64, 'base64').toString('utf8')).toBe('hope-bytes')
+    expect(payload.files[0].bytes).toBe('hope-bytes'.length)
+    // `commit 32eb84a` took absolute server paths out of the plan response; they
+    // must not come back in through this one.
+    expect(JSON.stringify(payload)).not.toContain(base)
+    for (const f of payload.files) expect(f).not.toHaveProperty('sourcePath')
+  })
+
+  test('the playlist lines match the names the files are posted under', async () => {
+    const payload = await buildPayload(
+      {
+        items: [item('Hopeless', 'Hard.bx'), item('Hope', 'Hope.bx'), item('Hopeless', 'Hard.bx')],
+        playlistTitle: 'Set',
+      },
+      base,
+    )
+    expect(payload.playlist).toEqual({
+      name: 'Set',
+      lines: ['hopeless-hard.bx', 'hope.bx', 'hopeless-hard.bx'],
+    })
+  })
+
+  test('an unreadable path is a warning and contributes no line', async () => {
+    const payload = await buildPayload(
+      { items: [item('Hopeless', 'Easy.bx'), item('Hope', 'Hope.bx')], playlistTitle: 'Set' },
+      base,
+    )
+    expect(payload.files.map((f) => f.name)).toEqual(['hope.bx'])
+    expect(payload.playlist?.lines).toEqual(['hope.bx'])
+    expect(payload.warnings).toHaveLength(1)
+    expect(payload.warnings[0]).toContain('Easy.bx')
+  })
+
+  test('no playlist title means no .bxpl', async () => {
+    const payload = await buildPayload({ items: [item('Hope', 'Hope.bx')] }, base)
+    expect(payload.playlist).toBeNull()
   })
 })
 

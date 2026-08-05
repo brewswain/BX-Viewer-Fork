@@ -17,6 +17,8 @@ import { planFiles, resolveOssmTarget } from './storage'
 import type {
   OssmCandidate,
   OssmItem,
+  OssmPayload,
+  OssmPayloadFile,
   OssmPlan,
   OssmPlannedFile,
   OssmRequest,
@@ -198,6 +200,57 @@ export async function planForBundle(candidates: OssmCandidate[]): Promise<OssmPl
     }
   }
   return planned
+}
+
+/**
+ * The same export as the zip, but with the bytes inline so the *browser* can
+ * post them to the app's own HTTP server (`/load_path`, `/load_playlist`).
+ *
+ * Planned exactly like the download and deliberately not like an install: the
+ * app decides for itself what a name clash means (`foo (2).bx`) and where its
+ * paths folder is, so inspecting the server's `Paths/` here would only produce
+ * names the app is going to overrule — and on a phone the server's `Paths/` is
+ * a different machine's folder anyway.
+ *
+ * Unreadable sources drop out, as they do from the zip — but as a *warning*
+ * rather than a console line, because this route's caller shows them and the
+ * playlist it gets back is one line shorter for it.
+ *
+ * `videoBase` is only overridden by tests.
+ */
+export async function buildPayload(
+  request: OssmRequest,
+  videoBase: string = VIDEO_BASE,
+): Promise<OssmPayload> {
+  const { candidates, warnings } = await buildCandidates(request.items, videoBase)
+
+  const files: OssmPayloadFile[] = []
+  const kept: OssmPlannedFile[] = []
+  for (const candidate of candidates) {
+    let data: Buffer
+    try {
+      data = await fs.readFile(candidate.sourcePath)
+    } catch {
+      // Names the library entry, never the absolute path — this goes to a
+      // browser that may be on another machine.
+      warnings.push(`${candidate.videoId}: "${candidate.sourceFile}" could not be read — left out`)
+      continue
+    }
+    files.push({
+      videoId: candidate.videoId,
+      sourceFile: candidate.sourceFile,
+      name: candidate.name,
+      bytes: data.byteLength,
+      dataB64: data.toString('base64'),
+    })
+    // `status` is `new` by construction: what the app already holds is the app's
+    // to decide, and it answers with the name it chose.
+    kept.push({ ...candidate, status: 'new', bytes: data.byteLength })
+  }
+
+  // Built from `kept`, so a file that dropped out contributes no line rather
+  // than a line the app will report as missing.
+  return { files, playlist: playlistFor(request, kept), warnings }
 }
 
 /** ≤8 lines, because it is read in a zip preview pane, not a browser. */

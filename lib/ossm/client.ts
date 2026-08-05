@@ -1,12 +1,13 @@
 /**
  * Browser-side calls for the OSSM Sauce export.
  *
- * Three endpoints, one request shape (see `./types`): dry-run the install,
- * commit it, or download the same content as a zip.
+ * Four endpoints, one request shape (see `./types`): dry-run the install, commit
+ * it, download the same content as a zip, or fetch it with the bytes inline so
+ * the browser can post it to the app itself (`./app`).
  */
 
 import { MANAGER_API } from '@/lib/manager-client'
-import type { OssmInstallResult, OssmPlan, OssmRequest } from './types'
+import type { OssmInstallResult, OssmPayload, OssmPlan, OssmRequest } from './types'
 
 const OSSM_API = `${MANAGER_API}/ossm`
 
@@ -29,6 +30,17 @@ export function planOssmExport(body: OssmRequest): Promise<OssmPlan> {
 
 export function installOssmExport(body: OssmRequest): Promise<OssmInstallResult> {
   return postJson<OssmInstallResult>(`${OSSM_API}/install`, body)
+}
+
+/**
+ * The export set with each file base64-encoded, to hand to `sendOssmPayload`.
+ *
+ * The bytes come here rather than being forwarded server-side on purpose: the
+ * app has to be reached from *this device*, which is the whole reason this route
+ * exists. Path data is tens of KB a file, so a JSON round trip is cheap.
+ */
+export function fetchOssmPayload(body: OssmRequest): Promise<OssmPayload> {
+  return postJson<OssmPayload>(`${OSSM_API}/payload`, body)
 }
 
 /**

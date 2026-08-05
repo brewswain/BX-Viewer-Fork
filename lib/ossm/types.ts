@@ -94,3 +94,84 @@ export type OssmInstallResult = {
   playlist: string | null
   warnings: string[]
 }
+
+/* -------------------------------------------------------------------------- */
+/* posting straight to the app                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One file as the browser has to hand it to the app: the name we ask for and
+ * the bytes, because the browser is where the request has to come *from* (the
+ * phone can reach the app's port; the Node server may be a different machine)
+ * and the library is where the bytes *are*.
+ *
+ * No `sourcePath`: same rule as `OssmPlanFile`. An absolute path on the server
+ * is no use here and the manager API is reachable across the LAN.
+ */
+export type OssmPayloadFile = {
+  videoId: string
+  sourceFile: string
+  /** Name we ask `/load_path` to store it as — see `OssmSendFile.stored`. */
+  name: string
+  /** Raw size, before base64. */
+  bytes: number
+  /** Standard base64, no data: prefix — the `data_b64` field of `/load_path`. */
+  dataB64: string
+}
+
+/**
+ * The export set with content attached, for the send-to-app route. Deliberately
+ * planned like the zip download rather than like an install: what is already in
+ * the app's `Paths/` is the app's business, and the server may not even be
+ * looking at the same machine's folder.
+ */
+export type OssmPayload = {
+  files: OssmPayloadFile[]
+  /** `.bxpl` name (no extension) and its lines, or null for a paths-only send. */
+  playlist: { name: string; lines: string[] } | null
+  warnings: string[]
+}
+
+/** What `/load_path` did with one file. */
+export type OssmSendFile = {
+  /** The name we posted. */
+  requested: string
+  /**
+   * The name the app is actually holding it under, or null if it never landed.
+   * The app never overwrites: identical bytes reuse the stored file, and a name
+   * held by *different* bytes becomes `foo (2).bx`. The playlist has to point at
+   * this, not at `requested`.
+   */
+  stored: string | null
+  /** True when the app recognised the bytes and kept the file it already had. */
+  reused: boolean
+  /** Populated only when `stored` is null. */
+  error: string | null
+}
+
+/**
+ * `sent` — the app loaded it. `conflict` — 409: the queue is not empty and we
+ * did not ask to replace it, which is the app refusing to discard something
+ * that may be playing. `none` — a paths-only send, so there was no `.bxpl`.
+ */
+export type OssmPlaylistOutcome = 'sent' | 'conflict' | 'failed' | 'none' | 'skipped'
+
+export type OssmPlaylistResult = {
+  outcome: OssmPlaylistOutcome
+  /** Entries the app took, and how many of them resolved to no path file. */
+  entries: number
+  missing: number
+  error: string | null
+}
+
+export type OssmSendResult = {
+  /** The base URL every request went to, so a failure can name it. */
+  url: string
+  files: OssmSendFile[]
+  /** Names the `.bxpl` was built from, after substituting what the app answered. */
+  playlistLines: string[]
+  /** Lines dropped because their file never stored — they would only be `missing`. */
+  droppedLines: string[]
+  playlist: OssmPlaylistResult
+  warnings: string[]
+}

@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  useEffect,
   useImperativeHandle,
   useState,
   type CSSProperties,
@@ -18,7 +19,14 @@ import {
   type VideoMeta,
 } from '@/lib/manager-client'
 import {
+  checkOssmApp,
+  resolveOssmAppUrl,
+  sendOssmPayload,
+  sendOssmPlaylist,
+} from '@/lib/ossm/app'
+import {
   downloadOssmBundle,
+  fetchOssmPayload,
   installOssmExport,
   planOssmExport,
   summarizePlan,
@@ -28,8 +36,10 @@ import type {
   OssmFileStatus,
   OssmPlan,
   OssmRequest,
+  OssmSendResult,
   OssmTarget,
 } from '@/lib/ossm/types'
+import { getSettings, setSettings } from '@/lib/settings'
 import type { ToastData, ToastLine } from './Toast'
 
 export type OssmExportOverlayApi = {
@@ -136,6 +146,13 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
   const [plans, setPlans] = useState<GroupPlan[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // Blank until the effect runs: the default comes from `window.location`, so a
+  // server render of it would hydrate wrong.
+  const [appUrl, setAppUrl] = useState('')
+
+  useEffect(() => {
+    setAppUrl(resolveOssmAppUrl(getSettings().ossmAppUrl))
+  }, [])
 
   async function loadPools() {
     setLoading(true)
@@ -450,6 +467,102 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
     showToast('error', 'Export incomplete', lines)
   }
 
+  /** Normalise + persist the app's address, and answer with what will be used. */
+  function commitUrl(): string {
+    const resolved = resolveOssmAppUrl(appUrl)
+    setAppUrl(resolved)
+    setSettings({ ossmAppUrl: appUrl.trim() ? resolved : '' })
+    return resolved
+  }
+
+  async function runCheck() {
+    if (busy) return
+    setBusy(true)
+    setError('Testing…')
+    const res = await checkOssmApp(commitUrl())
+    setBusy(false)
+    setError(res.ok ? '' : res.error)
+    if (res.ok) showToast('success', 'OSSM Sauce is there', `Answered at ${res.url}.`)
+  }
+
+  /**
+   * Post straight to the app, which is the only route that works when this page
+   * is not on the machine running the server — and the only one that survives a
+   * custom paths folder, because the app resolves the folder itself.
+   *
+   * One group at a time: the app has a single queue, so a second `/load_playlist`
+   * would replace what the first one just loaded. Splitting into several exports
+   * is a Download/Install idea, not a send idea.
+   */
+  async function runSend() {
+    if (!guard()) return
+    if (sendable.length > 1) {
+      setError(
+        'OSSM Sauce has one queue, so this sends one playlist at a time — select a single playlist, or switch to "Paths only".',
+      )
+      return
+    }
+
+    const group = sendable[0]
+    setBusy(true)
+    setError('Sending to OSSM Sauce…')
+    const url = commitUrl()
+
+    let res: OssmSendResult
+    try {
+      const payload = await fetchOssmPayload(requestFor(group, 1))
+      // `replace` deliberately off: a 409 is the app objecting on the user's
+      // behalf, and the user is the one who has to answer it.
+      res = await sendOssmPayload(payload, url)
+    } catch (e) {
+      setBusy(false)
+      setError(errMessage(e))
+      showToast('error', 'Send failed', errMessage(e))
+      return
+    }
+
+    if (res.playlist.outcome === 'conflict') {
+      const replace = window.confirm(
+        `${res.playlist.error}\n\nReplace it? Whatever is queued in OSSM Sauce now — possibly playing — is discarded. The paths are already stored either way.`,
+      )
+      if (replace) {
+        res = { ...res, playlist: await sendOssmPlaylist(res.url, res.playlistLines, true) }
+      }
+    }
+    setBusy(false)
+
+    // Partial success is normal here: files can store and the playlist still
+    // fail, so report what actually landed rather than one verdict.
+    const stored = res.files.filter((f) => f.stored && !f.reused).map((f) => f.stored!)
+    const reused = res.files.filter((f) => f.reused).map((f) => f.stored!)
+    const failed = res.files.filter((f) => !f.stored).map((f) => `${f.requested}: ${f.error}`)
+
+    const lines: ToastLine[] = []
+    if (stored.length) lines.push({ count: stored.length, label: 'paths sent', ids: stored })
+    if (reused.length)
+      lines.push({ count: reused.length, label: 'already there', ids: reused, dim: true })
+    if (res.playlist.outcome === 'sent')
+      lines.push({
+        count: res.playlist.entries,
+        label: res.playlist.missing ? `queued, ${res.playlist.missing} missing` : 'queued',
+        ids: res.playlistLines,
+      })
+    if (res.playlist.outcome === 'conflict')
+      lines.push({ count: 1, label: 'queue left alone', ids: ['playlist not loaded'] })
+    if (res.playlist.outcome === 'failed')
+      lines.push({ count: 1, label: 'playlist failed', ids: [res.playlist.error || ''] })
+    if (failed.length) lines.push({ count: failed.length, label: 'failed', ids: failed })
+    if (!lines.length) lines.push({ count: 0, label: 'nothing sent', ids: [] })
+
+    const bad = failed.length > 0 || res.playlist.outcome === 'failed'
+    showToast(bad ? 'error' : 'success', bad ? 'Send incomplete' : 'Sent to OSSM Sauce', lines)
+    if (bad) setError(`${failed.length} of ${res.files.length} failed`)
+    else {
+      setError('')
+      setOpen(false)
+    }
+  }
+
   /** Install is always a two-step: dry run, review, then write. */
   async function runPlan() {
     if (!guard()) return
@@ -695,6 +808,46 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
     0,
   )
 
+  /**
+   * The app's address, per device rather than per server: the phone's answer and
+   * the desktop's answer are different, and a setting on the server could only
+   * hold one of them. Blank means "this page's hostname, port 8081".
+   */
+  function appUrlField() {
+    return (
+      <div>
+        <div className="pkg-section-title">OSSM Sauce app</div>
+        <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem' }}>
+          <input
+            className="pkg-input"
+            style={{ flex: 1, minWidth: 0 }}
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="http://…:8081"
+            value={appUrl}
+            onChange={(e) => setAppUrl(e.target.value)}
+            onBlur={commitUrl}
+          />
+          <button
+            className="create-export-cancel-btn"
+            disabled={busy}
+            onClick={() => void runCheck()}
+          >
+            Test
+          </button>
+        </div>
+        <div style={{ ...NOTE, marginTop: '0.3rem' }}>
+          Where <em>this device</em> can reach OSSM Sauce&apos;s MCP server (Bridge
+          Settings → Bridge Mode: MCP → Enable; default port 8081). Sending posts the
+          paths there and lets the app do the write, so it works from a phone and
+          honours a custom paths folder. Remembered on this device only.
+        </div>
+      </div>
+    )
+  }
+
   function reviewBody() {
     return (
       <div style={{ ...SPAN_BOTH, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -796,6 +949,8 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
             ))}
           </div>
         ))}
+
+        {appUrlField()}
       </div>
     )
   }
@@ -850,6 +1005,16 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
             Skipped: {skips.map((s) => `${s.videoId} (${s.reason})`).join(', ')}
           </div>
         ) : null}
+
+        {sendable.length > 1 ? (
+          <div style={{ ...NOTE, color: 'var(--accent2)' }}>
+            Send to app takes one export at a time — OSSM Sauce has a single queue,
+            so a second playlist would replace the first. Pick one playlist, or
+            choose Paths only.
+          </div>
+        ) : null}
+
+        {appUrlField()}
       </div>
     )
   }
@@ -1010,6 +1175,14 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
                 Download .zip
               </button>
               <button
+                className="create-export-cancel-btn"
+                style={{ color: 'var(--teal)', borderColor: 'rgba(61, 214, 200, 0.35)' }}
+                disabled={busy || sendable.length !== 1}
+                onClick={() => void runSend()}
+              >
+                Send to app
+              </button>
+              <button
                 className="create-export-submit-btn"
                 disabled={busy || !canInstall}
                 onClick={() => void runInstall()}
@@ -1056,6 +1229,19 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
                 onClick={() => void runDownload()}
               >
                 Download .zip
+              </button>
+              <button
+                className="create-export-cancel-btn"
+                style={{ color: 'var(--teal)', borderColor: 'rgba(61, 214, 200, 0.35)' }}
+                disabled={busy || sendable.length !== 1}
+                title={
+                  sendable.length > 1
+                    ? 'One export at a time — OSSM Sauce has a single queue.'
+                    : 'Post the paths to the OSSM Sauce app over its own HTTP server.'
+                }
+                onClick={() => void runSend()}
+              >
+                Send to app
               </button>
               <button
                 className="create-export-submit-btn"

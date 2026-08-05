@@ -4932,6 +4932,43 @@ body:has(.manager-layout) {
   border-color: rgba(240, 180, 41, 0.35);
   background: var(--accent-glow);
 }
+.ossm-file-status-failed {
+  color: var(--red);
+  border-color: rgba(232, 85, 85, 0.35);
+}
+
+.ossm-note-ok {
+  color: var(--teal);
+}
+
+/* Where the OSSM Sauce app is, for the post-straight-to-it route. Per device:
+   the phone's answer and the desktop's answer are different addresses. */
+.ossm-app-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.6rem;
+}
+.ossm-app-field {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+.ossm-app-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  padding: 4px 7px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.ossm-app-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 
 /* Watch page sidebar is narrower and already dense — trim the plan block. */
 .ossm-panel-compact .ossm-file-list {

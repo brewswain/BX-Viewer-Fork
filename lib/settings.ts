@@ -42,6 +42,15 @@ export type Settings = {
   deviceInvert: boolean
   deviceOffsetMs: number
   deviceMinCmdMs: number
+  /**
+   * Base URL of the OSSM Sauce app for the *export* route (`lib/ossm/app.ts`).
+   * Empty means "guess from this page's hostname, port 8081", which is right
+   * whenever the app runs on the machine the browser is on — so the default has
+   * to be computed per device rather than baked in here, and only an explicit
+   * override is stored. Separate from `deviceOssmUrl`: that one drives hardware
+   * and stays pinned to loopback by default.
+   */
+  ossmAppUrl: string
 }
 
 export const DEFAULTS: Settings = {
@@ -78,6 +87,7 @@ export const DEFAULTS: Settings = {
   deviceInvert: false,
   deviceOffsetMs: 0,
   deviceMinCmdMs: 100,
+  ossmAppUrl: '',
 }
 
 export function getSettings(): Settings {
