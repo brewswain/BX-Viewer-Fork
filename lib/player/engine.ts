@@ -134,6 +134,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
   const speedSliderEl = byId<HTMLInputElement>('speedSlider')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
+  // Theater playlist drawer — both null outside the playlist page.
+  const btnPlaylistDrawer = byId<HTMLButtonElement>('btnPlaylistDrawer')
+  const btnCloseDrawer = byId<HTMLButtonElement>('btnTheaterSidebarClose')
   const tapIndicator = byId<HTMLElement>('videoTapIndicator')
   const tapIndicatorIcon = byId<HTMLElement>('videoTapIndicatorIcon') // <svg>
 
@@ -1007,6 +1010,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   function exitTheater() {
     isTheater = false
     if (cursorTimer) clearTimeout(cursorTimer)
+    setPlaylistDrawer(false)
     document.body.classList.remove('theater-mode', 'pointer-active')
     if (btnTheater) btnTheater.classList.remove('active')
     hideControls()
@@ -1017,6 +1021,27 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     on(btnTheater, 'click', () => {
       isTheater ? exitTheater() : enterTheater()
     })
+  }
+
+  // ── Theater playlist drawer ─────────────────────────────────────────────────
+  // The sidebar is laid out by the page; theater only decides whether it is on
+  // screen. Always starts closed — theater exists to get the chrome out of the
+  // way — and `enterTheater` never opens it, so re-entering resets it.
+
+  function isDrawerOpen(): boolean {
+    return document.body.classList.contains('theater-sidebar-open')
+  }
+
+  function setPlaylistDrawer(open: boolean) {
+    document.body.classList.toggle('theater-sidebar-open', open)
+    if (btnPlaylistDrawer) btnPlaylistDrawer.classList.toggle('active', open)
+  }
+
+  if (btnPlaylistDrawer) {
+    on(btnPlaylistDrawer, 'click', () => setPlaylistDrawer(!isDrawerOpen()))
+  }
+  if (btnCloseDrawer) {
+    on(btnCloseDrawer, 'click', () => setPlaylistDrawer(false))
   }
 
   on(document, 'keydown', (e: KeyboardEvent) => {
@@ -1030,8 +1055,13 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (e.key === 't' || e.key === 'T') {
       isTheater ? exitTheater() : enterTheater()
     }
+    if ((e.key === 'p' || e.key === 'P') && isTheater && btnPlaylistDrawer) {
+      setPlaylistDrawer(!isDrawerOpen())
+    }
     if (e.key === 'Escape' && isTheater) {
-      exitTheater()
+      // The drawer is the innermost thing Escape can dismiss; only once it is
+      // gone does Escape mean "leave theater".
+      isDrawerOpen() ? setPlaylistDrawer(false) : exitTheater()
     }
   })
 
@@ -1117,7 +1147,11 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       if (cursorTimer) clearTimeout(cursorTimer)
       for (const fn of cleanups) fn()
       cleanups.length = 0
-      document.body.classList.remove('theater-mode', 'pointer-active')
+      document.body.classList.remove(
+        'theater-mode',
+        'pointer-active',
+        'theater-sidebar-open',
+      )
     },
   }
 }

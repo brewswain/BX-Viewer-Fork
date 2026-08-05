@@ -2,6 +2,8 @@
 
 import { memo, type ReactNode } from 'react'
 
+import type { LoopMode, PlaylistLoopMode } from '@/lib/player/playback'
+
 /**
  * Progress bar plus the two control rows. The engine binds to these elements
  * by id, so ids and class names here are part of its contract.
@@ -16,11 +18,37 @@ const PLAY_ICON_HTML = '<polygon points="5,3 19,12 5,21"/>'
 const VOL_ICON_HTML =
   '<polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M15.54,8.46a5,5,0,0,1,0,7.07"/><path d="M19.07,4.93a10,10,0,0,1,0,14.14"/>'
 
+/**
+ * Per-mode label and badge for the loop button. Playlist modes (`all`/`one`)
+ * and single-video modes (`once`/`forever`) share the control, so they share
+ * one table; `off` is common to both.
+ */
+const LOOP_UI: Record<string, { title: string; badge: string | null }> = {
+  off: { title: 'Loop: off', badge: null },
+  all: { title: 'Loop: whole playlist', badge: '∞' },
+  one: { title: 'Loop: current video only', badge: '1' },
+  once: { title: 'Loop: one extra play', badge: '+1' },
+  forever: { title: 'Loop: forever', badge: '∞' },
+}
+
 type Props = {
   /** Include prev/next track buttons (playlist). */
   hasPrevNext?: boolean
   /** Include the flip-Y button. */
   hasFlipY?: boolean
+  /** Current loop mode; omit to leave the loop button out entirely. */
+  loopMode?: LoopMode | PlaylistLoopMode | null
+  /** Advance the loop mode one step. */
+  onCycleLoop?: () => void
+  /** Current shuffle state; omit to leave the shuffle button out (single video). */
+  shuffle?: boolean | null
+  onToggleShuffle?: () => void
+  /**
+   * Render the theater playlist-drawer toggle. It carries no handler: the
+   * engine binds `#btnPlaylistDrawer` by id, the same way it owns theater and
+   * fullscreen, so the drawer closes with theater without a second owner.
+   */
+  hasPlaylistDrawer?: boolean
   /** Contents of `#bxSelectWrap` — the bx-file `<select>`, when there is one. */
   bxSelect?: ReactNode
   /** Total tracks for trackDisplay (playlist). */
@@ -36,6 +64,11 @@ type Props = {
 function PlayerControls({
   hasPrevNext = false,
   hasFlipY = false,
+  loopMode = null,
+  onCycleLoop,
+  shuffle = null,
+  onToggleShuffle,
+  hasPlaylistDrawer = false,
   bxSelect = null,
   totalCount = null,
   duration = '00:00',
@@ -44,6 +77,7 @@ function PlayerControls({
   onNextTrack,
 }: Props) {
   const showTrackDisplay = hasPrevNext && totalCount !== null
+  const loopUi = loopMode ? (LOOP_UI[loopMode] ?? LOOP_UI.off) : null
 
   return (
     <div className="player-controls">
@@ -115,6 +149,58 @@ function PlayerControls({
         )}
 
         <div className="controls-spacer"></div>
+
+        {loopUi && (
+          <button
+            className={
+              loopMode === 'off' ? 'ctrl-btn loop-btn' : 'ctrl-btn loop-btn active'
+            }
+            id="btnLoop"
+            title={loopUi.title}
+            aria-label={loopUi.title}
+            onClick={onCycleLoop}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="17,2 21,6 17,10" />
+              <path d="M3 12V10a4 4 0 0 1 4-4h14" />
+              <polyline points="7,22 3,18 7,14" />
+              <path d="M21 12v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            {loopUi.badge && <span className="ctrl-btn-badge">{loopUi.badge}</span>}
+          </button>
+        )}
+        {shuffle !== null && (
+          <button
+            className={shuffle ? 'ctrl-btn active' : 'ctrl-btn'}
+            id="btnShuffle"
+            title={`Shuffle: ${shuffle ? 'on' : 'off'}`}
+            aria-label={`Shuffle: ${shuffle ? 'on' : 'off'}`}
+            onClick={onToggleShuffle}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="16,3 21,3 21,8" />
+              <line x1="4" y1="20" x2="21" y2="3" />
+              <polyline points="21,16 21,21 16,21" />
+              <line x1="15" y1="15" x2="21" y2="21" />
+              <line x1="4" y1="4" x2="9" y2="9" />
+            </svg>
+          </button>
+        )}
+        {hasPlaylistDrawer && (
+          <button
+            className="ctrl-btn theater-only"
+            id="btnPlaylistDrawer"
+            title="Playlist (P)"
+            aria-label="Toggle playlist"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="14" y2="6" />
+              <line x1="3" y1="12" x2="14" y2="12" />
+              <line x1="3" y1="18" x2="10" y2="18" />
+              <polygon points="17,10 22,13 17,16" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+        )}
 
         <button className="ctrl-btn" id="btnTheater" title="Theater mode">
           <svg

@@ -19,7 +19,8 @@ This program was written with generative AI, with human intervention as well. I 
 
 - 🎯 Path Synchronization: Automatically syncs BounceX paths to their corresponding videos! Works when scrubbing as well!
 - 🔒 Private & Self-Hosted: Completely private! Host any video you like on your own personal network!
-- 🎭 Theater Mode: Unobstructed viewing experience for maximum immersion! On by default (`T` or `Esc` leaves it); turn the default off in Settings.
+- 🎭 Theater Mode: Unobstructed viewing experience for maximum immersion! On by default (`T` or `Esc` leaves it); turn the default off in Settings. The playlist slides in from the right as a drawer — `P`, or the list button in the control bar.
+- 🔁 Loop & Shuffle: Repeat the whole playlist, just the current video, or a single favourite — one extra play or forever — without duplicating it in the playlist. Looping works on single videos too, for content meant to run on repeat.
 - 📺 Classic Overlays: Generated on the fly, with the ability to disable the background dim!
 - 🔄 Y-Axis Flip: Need a different perspective? Flip the Y-axis with ease!
 - 📍 Multiple Paths Per Video: Perfect for difficulty selection or different route options!

@@ -881,6 +881,26 @@ body {
   height: 22px;
 }
 
+/* Loop has three states, so the icon alone cannot say which one is on. The
+   badge rides in the corner of the button rather than replacing the glyph. */
+.ctrl-btn.loop-btn {
+  position: relative;
+}
+
+.ctrl-btn-badge {
+  position: absolute;
+  right: 0.05rem;
+  bottom: 0.05rem;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: var(--bg2, #0a0b0f);
+  color: inherit;
+  pointer-events: none;
+}
+
 .time-display {
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -1566,6 +1586,53 @@ body::after {
   font-size: 0.62rem;
   color: var(--text3);
   flex-shrink: 0;
+}
+
+/* Per-track repeat. Stays dim until it is set to something, so a list of seven
+   tracks is not seven loop glyphs competing with the titles. */
+.ptrack-repeat {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text3);
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  opacity: 0.35;
+  cursor: pointer;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+}
+
+.ptrack-repeat svg {
+  width: 13px;
+  height: 13px;
+}
+
+.playlist-track-item:hover .ptrack-repeat,
+.ptrack-repeat:focus-visible {
+  opacity: 1;
+}
+
+.ptrack-repeat.active {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.ptrack-repeat-badge {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  font-family: var(--mono);
+  font-size: 0.48rem;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* ── About Page ── */
@@ -2396,6 +2463,84 @@ body.theater-mode .player-controls {
 body.theater-mode #playerContainer.controls-visible .player-controls {
   transform: translateY(0);
   opacity: 1;
+}
+
+/* ── Theater playlist drawer ───────────────────────────────────────────────
+   The sidebar is the same element the normal layout uses; theater lifts it out
+   of the grid into a right-edge drawer over the fixed player. Closed by
+   default and reset on every entry — the engine owns `.theater-sidebar-open`.
+   ------------------------------------------------------------------------- */
+
+body.theater-mode .player-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 90vw);
+  z-index: 210;
+  margin: 0;
+  padding: 3rem 1rem 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(8, 9, 13, 0.96);
+  border-left: 1px solid var(--border);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.6);
+  transform: translateX(100%);
+  /* `visibility` keeps the off-screen drawer out of tab order and off the
+     pointer, but it must wait for the slide-out to finish — hence the delay,
+     dropped to 0 on the way in. */
+  visibility: hidden;
+  transition:
+    transform 0.25s ease,
+    visibility 0s linear 0.25s;
+  /* `body` sets `cursor: none` and it inherits; the drawer is pointer UI. */
+  cursor: default;
+}
+
+body.theater-mode.theater-sidebar-open .player-sidebar {
+  transform: translateX(0);
+  visibility: visible;
+  transition:
+    transform 0.25s ease,
+    visibility 0s;
+}
+
+.theater-sidebar-close {
+  display: none;
+}
+
+body.theater-mode .theater-sidebar-close {
+  display: flex;
+  position: absolute;
+  top: 0.6rem;
+  right: 0.8rem;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+body.theater-mode .theater-sidebar-close:hover {
+  color: var(--text);
+  border-color: var(--text3);
+}
+
+/* The drawer toggle is a theater affordance only — outside theater the sidebar
+   is already on screen and the button would do nothing visible. */
+.ctrl-btn.theater-only {
+  display: none;
+}
+
+body.theater-mode .ctrl-btn.theater-only {
+  display: inline-flex;
 }
 
 /* Overlay mode: bxWrap is absolute over the video — keep it that way */

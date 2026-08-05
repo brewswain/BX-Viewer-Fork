@@ -29,6 +29,12 @@ import {
 import { FPS, VIDEO_BASE } from '@/lib/player/constants'
 import { createPlayerEngine, type PlayerEngine } from '@/lib/player/engine'
 import {
+  cycleLoopMode,
+  loadVideoLoop,
+  saveVideoLoop,
+  type LoopMode,
+} from '@/lib/player/playback'
+import {
   easeLabel,
   fetchJSON,
   fetchText,
@@ -78,6 +84,11 @@ function WatchInner() {
     frames: '–',
   })
   const [suggestions, setSuggestions] = useState<Suggestions>({ state: 'loading' })
+  // Some clips are made to run on repeat, so this is remembered per video.
+  const [loopMode, setLoopMode] = useState<LoopMode>('off')
+  const loopModeRef = useRef<LoopMode>('off')
+  /** Extra plays already taken, for resolving a `once` loop. */
+  const loopsUsedRef = useRef(0)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -108,6 +119,12 @@ function WatchInner() {
     bxIndexRef.current = 0
     setStats({ duration: '–', frames: '–' })
     setSuggestions({ state: 'loading' })
+    // Client-only, so read here rather than seeded into useState — a seeded
+    // localStorage read runs on the server and desyncs hydration.
+    const storedLoop = loadVideoLoop(videoId)
+    loopModeRef.current = storedLoop
+    loopsUsedRef.current = 0
+    setLoopMode(storedLoop)
 
     async function loadPlayer(id: string) {
       try {
@@ -405,6 +422,15 @@ function WatchInner() {
       onPlaying,
       onProgress,
       onFrame,
+      onEnded() {
+        // `forever` loops the element itself (gapless) and never fires `ended`;
+        // `once` has to be counted, which is exactly what this event is for.
+        if (loopModeRef.current !== 'once' || loopsUsedRef.current >= 1) return
+        loopsUsedRef.current += 1
+        video!.currentTime = 0
+        engine.resetSmoothTime()
+        void video!.play().catch(() => {})
+      },
     })
     engineRef.current = engine
 
@@ -469,6 +495,22 @@ function WatchInner() {
     engine.loadBxData(newPath, frames, src.effects || [], src.peaks || [])
     lastHighlightedRef.current = -1
   }, [activeBxIndex, loaded])
+
+  // ── Loop ────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (video) video.loop = loopMode === 'forever'
+  }, [loopMode, loaded])
+
+  function cycleLoop() {
+    const next = cycleLoopMode(loopMode)
+    loopModeRef.current = next
+    // Re-arming `once` after it has been spent should give another extra play.
+    loopsUsedRef.current = 0
+    setLoopMode(next)
+    if (videoId) saveVideoLoop(videoId, next)
+  }
 
   // ── Marker click-to-seek ────────────────────────────────────────────────────
   function seekToFrame(frame: number) {
@@ -624,7 +666,13 @@ function WatchInner() {
               canvasRef={canvasRef}
               bxWrapRef={bxWrapRef}
             />
-            <PlayerControls hasFlipY bxSelect={bxSelect} duration="" />
+            <PlayerControls
+              hasFlipY
+              bxSelect={bxSelect}
+              duration=""
+              loopMode={loopMode}
+              onCycleLoop={cycleLoop}
+            />
           </div>
 
           <div className="video-info">
