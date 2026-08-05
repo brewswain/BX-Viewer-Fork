@@ -17,9 +17,12 @@ import type { Settings } from '@/lib/settings'
 import {
   BALL_R,
   BX_HEIGHT_OVERLAY,
+  BX_THEATER_MAX_VH,
+  BX_THEATER_MIN_VH,
   EDGE_PAD,
   FPS,
   PX_PER_FRAME,
+  THEATER_EDGE_ZONE,
 } from './constants'
 import {
   buildColors,
@@ -236,12 +239,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (isFullscreen()) return Math.round(window.innerHeight * 0.35)
     // Theater keeps the strip in the layout, so every pixel it takes is a pixel
     // off the picture. Spend the letterbox slack first — that part is free —
-    // and fall back to the ordinary compact strip when there is none.
+    // and fall back to a viewport-relative floor when there is none, so the
+    // strip stays readable on a big screen instead of pinning to 200px.
     if (isTheater) {
+      const floor = Math.max(
+        BX_HEIGHT_OVERLAY,
+        Math.round(window.innerHeight * BX_THEATER_MIN_VH),
+      )
       return Math.round(
         Math.min(
-          Math.max(letterboxSlack(), BX_HEIGHT_OVERLAY),
-          window.innerHeight * 0.35,
+          Math.max(letterboxSlack(), floor),
+          window.innerHeight * BX_THEATER_MAX_VH,
         ),
       )
     }
@@ -257,7 +265,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       const waveformPx = Math.min(2 * sliderValue * refH, refH)
       h = Math.round(waveformPx) + 2 * (BALL_R + 2)
     } else if (isFullscreen() || isTheater) {
-      h = Math.round(window.innerHeight * 0.35)
+      h = Math.round(window.innerHeight * BX_THEATER_MAX_VH)
     } else {
       h = BX_HEIGHT_OVERLAY
     }
@@ -921,16 +929,19 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   /**
-   * How close to the bottom edge the pointer has to be for theater to raise the
-   * controls. Always at least the height of the control bar itself, or moving
-   * onto the bar it just revealed would dismiss it.
+   * How close to the bottom edge the pointer has to be for theater to keep the
+   * controls up. Hysteresis: raising them takes a thin band at the very bottom
+   * of the screen, but once the bar is up it owns its own height — otherwise
+   * moving onto the bar it just revealed would dismiss it.
    */
   function theaterControlsZone(): number {
-    const controls = byId<HTMLElement>('playerContainer').querySelector(
-      '.player-controls',
-    )
+    const container = byId<HTMLElement>('playerContainer')
+    if (!container.classList.contains('controls-visible')) {
+      return THEATER_EDGE_ZONE
+    }
+    const controls = container.querySelector('.player-controls')
     const barH = controls ? controls.getBoundingClientRect().height : 0
-    return Math.max(120, Math.round(barH) + 24)
+    return Math.max(THEATER_EDGE_ZONE, Math.round(barH))
   }
 
   function onEnterFullscreen() {

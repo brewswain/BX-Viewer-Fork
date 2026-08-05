@@ -17,3 +17,11 @@ export const PX_PER_FRAME = 3
 export const EDGE_PAD = 8
 export const BX_HEIGHT_BELOW = 100 // px height when not in overlay mode (reference)
 export const BX_HEIGHT_OVERLAY = 200 // px height when in overlay mode
+
+// Theater tuning
+/** Floor for the theater strip, as a fraction of the viewport height. */
+export const BX_THEATER_MIN_VH = 0.25
+/** Ceiling for the theater strip, as a fraction of the viewport height. */
+export const BX_THEATER_MAX_VH = 0.35
+/** How close to the bottom edge the pointer must get to raise the controls. */
+export const THEATER_EDGE_ZONE = 32
