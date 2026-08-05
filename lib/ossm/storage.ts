@@ -3,13 +3,22 @@
  *
  * OSSM Sauce keeps its library in `<Documents>/OSSM Sauce/` — `Paths/` (flat,
  * `.bx`/`.funscript`) and `Playlists/` (`.bxpl`), both created at startup by
- * `ossm_sauce.gd:289` from `OS.get_system_dir(SYSTEM_DIR_DOCUMENTS)`
- * (`ossm_sauce.gd:76`). Finding that folder is the whole difficulty here:
- * "Documents" is not `~/Documents` on Windows once OneDrive redirects it, and
- * writing to the wrong one produces a folder the app never reads — no error,
- * just an export that appears to have vanished. So the resolver mirrors what
- * Godot itself asks the OS, per platform, and prefers a directory that already
- * holds an install over any guess.
+ * `ossm_sauce.gd:446` (`check_root_directory`) under
+ * `OS.get_system_dir(SYSTEM_DIR_DOCUMENTS)` (`ossm_sauce.gd:168-171`). Finding
+ * that folder is the whole difficulty here: "Documents" is not `~/Documents` on
+ * Windows once OneDrive redirects it, and writing to the wrong one produces a
+ * folder the app never reads — no error, just an export that appears to have
+ * vanished. So the resolver mirrors what Godot itself asks the OS, per
+ * platform, and prefers a directory that already holds an install over any
+ * guess.
+ *
+ * Known gap: the app has a custom paths folder setting, and
+ * `_resolve_storage_dir` (`ossm_sauce.gd:2326-2333`) redirects the `paths`
+ * category — and only that category — to it. Playlists stay under Documents.
+ * Nothing here models that, so with one set an install puts the `.bxpl` where
+ * the app reads it and the `.bx` files where it does not, and still reports
+ * success. `OSSM_SAUCE_DIR` / `ossmSauceDir` don't help: they move the whole
+ * tree. See `docs/ossm-export.md`.
  *
  * Nothing here overwrites: an existing path file is either recognised as
  * byte-identical (and skipped) or sidestepped with a suffixed name.

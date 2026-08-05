@@ -503,7 +503,8 @@ describe('installFiles', () => {
     expect(result.warnings).toEqual([])
     expect(await fs.readFile(path.join(ossm, 'Paths', 'new.bx'), 'utf8')).toBe('fresh')
     expect(result.playlist).toBe('My List.bxpl')
-    // LF-terminated, one bare filename per line — what `store_line` produces.
+    // LF-terminated, one bare filename per line — the app's legacy v1 shape,
+    // which `_parse_legacy` still reads.
     expect(await fs.readFile(path.join(ossm, 'Playlists', 'My List.bxpl'), 'utf8')).toBe(
       'new.bx\nold.bx\n',
     )

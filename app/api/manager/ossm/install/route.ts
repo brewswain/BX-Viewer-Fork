@@ -6,7 +6,14 @@ import { installFiles } from '@/lib/ossm/storage'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/** Copy the paths into `Paths/` and write the `.bxpl`, never overwriting. */
+/**
+ * Copy the paths into `Paths/` and write the `.bxpl`, never overwriting.
+ *
+ * Reports success on the writes it made, which is not the same as the app
+ * finding them: if the user set a custom paths folder, the app reads `Paths/`
+ * from there and playlists from Documents (`ossm_sauce.gd:2326-2333`), and the
+ * resolver has no concept of that. See `docs/ossm-export.md`.
+ */
 export async function POST(request: Request) {
   return guard(async () => {
     const parsed = parseOssmRequest(await request.text())

@@ -2,7 +2,8 @@
  * Filenames for an OSSM Sauce export.
  *
  * OSSM Sauce keeps every path in one flat `Paths/` folder and resolves each
- * playlist line against it by name alone (`add_file.gd` → `load_path`), so an
+ * playlist line against it by name alone (`_resolve_storage_path`,
+ * `ossm_sauce.gd:2315-2323` — folder plus name, nothing else), so an
  * exported name has to identify its video on its own. Copying source names
  * verbatim would put files like `Hard.bx` and `Medium.bx` in there — ambiguous
  * in the app's Add Path list, and one name clash away from silently
@@ -61,7 +62,7 @@ export function ossmPathName(
 
 /**
  * OSSM Sauce derives a playlist's displayed name from its `.bxpl` filename and
- * strips these same characters when saving one itself (`save_playlist.gd`), so
+ * strips these same characters when saving one itself (`save_playlist.gd:7`), so
  * an export it can't have produced is an export we shouldn't write.
  */
 export function sanitizeBxplName(raw: string): string {
@@ -83,8 +84,11 @@ export function suffixName(name: string, suffix: string): string {
 
 /**
  * `.bxpl` body: one entry per line, each a bare filename resolved against
- * `Paths/`. `save_playlist.gd` writes it with `store_line`, so LF and a
- * trailing newline is the shape the app itself produces.
+ * `Paths/`. This is the app's legacy v1 format — it writes v2 JSON now
+ * (`save_playlist.gd:30` → `PlaylistFormat.serialize`) — but still reads v1:
+ * `deserialize` sniffs the first non-whitespace character for `{` and falls
+ * back to `_parse_legacy` (`playlist_format.gd:68-74`, `164-191`). LF and a
+ * trailing newline are what that parser expects; blank lines are skipped.
  */
 export function bxplBody(lines: string[]): string {
   return lines.map((l) => `${l}\n`).join('')
