@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BX Viewer · Device Output Manual</title>
+<style>
+  @page { size: Letter; margin: 17mm 16mm 15mm; }
+
+  :root {
+    --ink: #14171a;
+    --mute: #5b6570;
+    --rule: #d7dde3;
+    --teal: #0e7c72;
+    --warn: #9a4a00;
+    --panel: #f4f7f8;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    margin: 0;
+    font: 10.5pt/1.5 "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+  }
+
+  code, .mono {
+    font-family: "Cascadia Mono", Consolas, "SF Mono", monospace;
+    font-size: 0.9em;
+    background: var(--panel);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    print-color-adjust: exact;
+  }
+
+  h1, h2, h3 { line-height: 1.25; margin: 0; }
+  h2 {
+    font-size: 15pt;
+    margin: 22pt 0 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 1.5pt solid var(--teal);
+    break-after: avoid;
+  }
+  h3 {
+    font-size: 11.5pt;
+    margin: 14pt 0 5pt;
+    color: var(--teal);
+    break-after: avoid;
+  }
+  p { margin: 0 0 8pt; }
+  ol, ul { margin: 0 0 9pt; padding-left: 18pt; }
+  li { margin-bottom: 4pt; }
+  li > ul, li > ol { margin-top: 4pt; }
+
+  /* ---- cover ---- */
+  .cover {
+    break-after: page;
+    padding-top: 42mm;
+  }
+  .eyebrow {
+    font-size: 9pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--teal);
+    font-weight: 600;
+  }
+  .cover h1 {
+    font-size: 30pt;
+    letter-spacing: -0.02em;
+    margin: 6pt 0 10pt;
+  }
+  .cover .sub {
+    font-size: 12pt;
+    color: var(--mute);
+    max-width: 118mm;
+    line-height: 1.45;
+  }
+  .cover .meta {
+    margin-top: 28pt;
+    padding-top: 10pt;
+    border-top: 1pt solid var(--rule);
+    font-size: 9.5pt;
+    color: var(--mute);
+  }
+
+  .toc { margin-top: 30pt; }
+  .toc-title {
+    font-size: 9pt; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--mute); font-weight: 600; margin-bottom: 7pt;
+  }
+  .toc ol { list-style: none; padding: 0; margin: 0; column-count: 2; column-gap: 14mm; }
+  .toc li { margin-bottom: 3.5pt; font-size: 10pt; break-inside: avoid; }
+  .toc .n { color: var(--teal); font-weight: 600; display: inline-block; width: 14pt; }
+
+  /* ---- callouts ---- */
+  .note, .warn {
+    border-left: 3pt solid var(--teal);
+    background: var(--panel);
+    padding: 8pt 11pt;
+    margin: 10pt 0;
+    break-inside: avoid;
+    print-color-adjust: exact;
+  }
+  .warn { border-left-color: var(--warn); background: #fdf6ee; }
+  .note p:last-child, .warn p:last-child { margin-bottom: 0; }
+  .note .lbl, .warn .lbl {
+    display: block;
+    font-size: 8.5pt; letter-spacing: 0.1em; text-transform: uppercase;
+    font-weight: 700; color: var(--teal); margin-bottom: 3pt;
+  }
+  .warn .lbl { color: var(--warn); }
+
+  /* ---- tables ---- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8pt 0 12pt;
+    font-size: 9.5pt;
+  }
+  th {
+    text-align: left;
+    background: var(--panel);
+    border-bottom: 1pt solid var(--rule);
+    padding: 5pt 7pt;
+    font-weight: 600;
+    print-color-adjust: exact;
+  }
+  td { padding: 5pt 7pt; border-bottom: 0.5pt solid var(--rule); vertical-align: top; }
+  tr { break-inside: avoid; }
+  td:first-child { font-weight: 600; width: 33%; }
+  table.tight td:first-child { width: 26%; }
+
+  .steps { counter-reset: s; list-style: none; padding-left: 0; }
+  .steps > li {
+    counter-increment: s;
+    position: relative;
+    padding-left: 22pt;
+    margin-bottom: 7pt;
+    break-inside: avoid;
+  }
+  .steps > li::before {
+    content: counter(s);
+    position: absolute; left: 0; top: 0.5pt;
+    width: 15pt; height: 15pt;
+    border-radius: 50%;
+    background: var(--teal); color: #fff;
+    font-size: 8.5pt; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    print-color-adjust: exact;
+  }
+
+  .kbd-path { font-weight: 600; }
+  .lede { font-size: 11pt; color: var(--mute); margin-bottom: 12pt; }
+  .pagebreak { break-before: page; }
+  footer {
+    margin-top: 20pt; padding-top: 8pt;
+    border-top: 1pt solid var(--rule);
+    font-size: 8.5pt; color: var(--mute);
+  }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="eyebrow">BX Viewer · User Manual</div>
+  <h1>Driving an OSSM<br>from video playback</h1>
+  <p class="sub">How to connect BX Viewer to an OSSM through OSSM&nbsp;Sauce, so the machine follows the
+  same <code>.bx</code> path the waveform is drawn from, in time with the video.</p>
+
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><span class="n">1</span>What this does</li>
+      <li><span class="n">2</span>What you need</li>
+      <li><span class="n">3</span>One-time setup</li>
+      <li><span class="n">4</span>Every session</li>
+      <li><span class="n">5</span>Playing</li>
+      <li><span class="n">6</span>Tuning</li>
+      <li><span class="n">7</span>Settings reference</li>
+      <li><span class="n">8</span>Troubleshooting</li>
+      <li><span class="n">9</span>Testing without hardware</li>
+      <li><span class="n">10</span>How it works</li>
+      <li><span class="n">11</span>Known limits</li>
+    </ol>
+  </div>
+
+  <div class="meta">
+    Revision 2 · 31 July 2026 · covers OSSM&nbsp;Sauce 1.5.1 and Buttplug message spec v3
+  </div>
+</section>
+
+<h2>1 · What this does</h2>
+
+<p>A <code>.bx</code> file already describes where the stroke should be at every moment of a video —
+that is what the waveform under the player draws. Device output takes that same path and sends it to
+your machine as it plays, so the OSSM follows what is on screen.</p>
+
+<p>It runs entirely in the browser page. There is no extra server to start and no change to your
+files. Playback stays in charge: pause and the machine stops, seek and it picks up wherever you
+landed, switch browser tabs and it halts.</p>
+
+<div class="note">
+  <span class="lbl">The short version</span>
+  <p>Tick one box in the viewer's settings. Put OSSM&nbsp;Sauce in <span class="kbd-path">MCP</span>
+  bridge mode and press Enable. Press play.</p>
+</div>
+
+<h2>2 · What you need</h2>
+
+<table class="tight">
+  <tr><td>An OSSM</td><td>Powered on, running OSSM&nbsp;Sauce firmware, and joined to your network.</td></tr>
+  <tr><td>OSSM&nbsp;Sauce</td><td>The desktop app. It is the bridge — the browser cannot reach the machine
+    without it. Version 1.5.1 or newer, which is where the MCP bridge mode appears.</td></tr>
+  <tr><td>A video with a path</td><td>Any title in your library that has a <code>.bx</code> file. No path,
+    nothing to send.</td></tr>
+  <tr><td>Intiface Central</td><td><em>Not needed.</em> Only if you are driving something other than an
+    OSSM — see §3.</td></tr>
+</table>
+
+<div class="note">
+  <span class="lbl">Why OSSM Sauce is not optional</span>
+  <p>The OSSM's ESP32 is a WebSocket <em>client</em>: it dials out to OSSM&nbsp;Sauce, which is the
+  server. Nothing can connect <em>to</em> the machine, so every route to it — ours included — ends up
+  going through the app.</p>
+</div>
+
+<h2>3 · One-time setup</h2>
+
+<h3>In the viewer</h3>
+
+<ol class="steps">
+  <li>Open <span class="kbd-path">Settings → Device output (OSSM)</span>.</li>
+  <li>Tick <span class="kbd-path">Enable device output</span>. This is the master switch, and it is off
+    by default so that opening a page can never start hardware on its own.</li>
+  <li>Leave <span class="kbd-path">Connection</span> on <span class="kbd-path">OSSM, raw (MCP
+    bridge)</span> and the address on <code>http://127.0.0.1:8081</code>. This is the default.</li>
+  <li>Tick <span class="kbd-path">Connect automatically</span> if you want it to connect whenever a
+    player page opens, rather than pressing Connect each time.</li>
+  <li>Save.</li>
+</ol>
+
+<h3>In OSSM Sauce</h3>
+
+<ol class="steps">
+  <li>Open <span class="kbd-path">Bridge Settings</span>, set <span class="kbd-path">Bridge Mode</span>
+    to <span class="kbd-path">MCP</span>, and press <span class="kbd-path">Enable</span>.</li>
+</ol>
+
+<p>That is the whole setup. The bridge mode is remembered between launches; only
+<span class="kbd-path">Enable</span> needs pressing each time you open the app.</p>
+
+<div class="note">
+  <span class="lbl">Why this route and not the other two</span>
+  <p>The <span class="kbd-path">XToys</span> and <span class="kbd-path">Buttplug.io</span> bridges take
+  a <em>description</em> of each move and decide for themselves what the machine does with it. Both
+  clamp anything shorter than <span class="kbd-path">Minimum Duration</span> — 500&nbsp;ms out of the
+  box, which stretches a dense path until the machine falls hopelessly behind — and both re-ease every
+  stroke with <span class="kbd-path">Stroke Smoothing</span>, which OSSM&nbsp;Sauce resets to
+  <code>Sine</code> on every launch because it never saves the setting.</p>
+  <p>The MCP bridge does neither. It passes the bytes we send straight to the machine, so the viewer
+  builds the firmware's own move command and chooses the motion directly. Nothing to set by hand, and
+  nothing to remember to re-set tomorrow.</p>
+</div>
+
+<p>The other two options remain in the Connection dropdown. Pick
+<span class="kbd-path">Intiface Central</span> if you are driving something other than an OSSM, or
+already run Intiface for other reasons; it reaches an OSSM only by way of OSSM&nbsp;Sauce registering
+itself with Intiface as a TCode device. Pick <span class="kbd-path">XToys</span> only if the MCP mode
+is unavailable in your build. Both then need <span class="kbd-path">Minimum Duration</span> at
+50&nbsp;ms and <span class="kbd-path">Stroke Smoothing</span> on <code>Linear</code> — the latter every
+launch.</p>
+
+<h2 class="pagebreak">4 · Every session</h2>
+
+<ol class="steps">
+  <li><strong>Power the OSSM on and let it connect to OSSM&nbsp;Sauce</strong> before you start
+    playback.</li>
+  <li><strong>Press <span class="kbd-path">Enable</span></strong> on the bridge screen.</li>
+</ol>
+
+<p>That is it — there is no setting to re-apply. The viewer asks OSSM&nbsp;Sauce every couple of
+seconds whether the machine is actually attached, so if you forget step 1 the Device panel will tell
+you rather than leaving you to wonder why nothing is moving.</p>
+
+<div class="note">
+  <span class="lbl">On safety limits</span>
+  <p>Sending the machine's own command directly does not bypass anything that protects you. Depth is
+  expressed as a fraction of the range you configured in OSSM&nbsp;Sauce, and the firmware maps it into
+  that range and clamps it; speed and acceleration limits are enforced on the machine as always. It is
+  the same command the bridges send, with the timing and easing fields left as we set them.</p>
+</div>
+
+<h2>5 · Playing</h2>
+
+<p>Open a video and press play. That is the whole operation — the machine tracks the path from there.</p>
+
+<p>The <strong>Device</strong> panel lives at the top of the <span class="kbd-path">BounceX Data</span>
+tab in the player sidebar, and the viewer opens that tab for you when device output is enabled. Connect
+from there if you did not turn on automatic connection. The status dot is the thing to watch:</p>
+
+<table class="tight">
+  <tr><td>Grey</td><td>Not connected.</td></tr>
+  <tr><td>Amber</td><td>Connecting, or connected but not yet armed.</td></tr>
+  <tr><td>Solid teal</td><td>Connected and driving.</td></tr>
+</table>
+
+<p>Playback controls behave the way you would expect. Pausing stops the machine where it is. Seeking or
+scrubbing re-anchors it to the depth the path calls for at the new position — a jump of more than a
+quarter-second is treated as a seek rather than as drift. Switching to another browser tab halts it,
+and so does closing the page.</p>
+
+<h2>6 · Tuning</h2>
+
+<p>Three settings in <span class="kbd-path">Settings → Device output</span> are worth reaching for once
+it is running. The first two take effect on the very next command, with no reload.</p>
+
+<h3>Stroke range</h3>
+<p>Limits how much of the machine's travel the path uses, as a percentage. Lower it to keep the whole
+path within a shallower window without changing the file.</p>
+
+<h3>Sync offset</h3>
+<p>Shifts the device in time against the video, in milliseconds. Positive delays the machine, negative
+makes it lead. Use it for mechanical lag: if the machine feels consistently a beat behind everything on
+screen, a negative offset of 50–150&nbsp;ms usually settles it. Only use this for a <em>constant</em>
+error — an error that grows over the course of a video is the Minimum Duration clamp, not this.</p>
+
+<h3>Minimum move</h3>
+<p>The shortest command the viewer will issue; anything closer together than this gets merged. Raise it
+if the machine stutters or cannot keep up on dense paths — a coarser path it can actually follow beats a
+detailed one it cannot. This is the one tuning knob that costs something to change, because it replans
+the track.</p>
+
+<h2 class="pagebreak">7 · Settings reference</h2>
+
+<table>
+  <tr><th>Setting</th><th>What it does</th></tr>
+  <tr><td>Enable device output</td><td>Master switch. Off by default; nothing connects or moves while it
+    is off.</td></tr>
+  <tr><td>Connect automatically</td><td>Connects as soon as a player page opens, instead of waiting for
+    the Connect button.</td></tr>
+  <tr><td>Connection</td><td><em>OSSM, raw</em> is the default and goes through the app's MCP bridge
+    untouched. <em>XToys</em> and <em>Intiface Central</em> are the older routes; the latter also
+    drives non-OSSM positional toys.</td></tr>
+  <tr><td>Server address</td><td><code>http://127.0.0.1:8081</code> for MCP,
+    <code>ws://127.0.0.1:8080</code> for XToys, <code>ws://127.0.0.1:12345</code> for Intiface. Change
+    only if you moved the port.</td></tr>
+  <tr><td>Invert direction</td><td>Swaps the ends of the stroke.</td></tr>
+  <tr><td>Stroke range</td><td>Percentage of available travel the path is mapped into.</td></tr>
+  <tr><td>Sync offset</td><td>Milliseconds of lead or lag against the video.</td></tr>
+  <tr><td>Minimum move</td><td>Shortest command issued; commands closer than this are merged.</td></tr>
+</table>
+
+<h3>And on the OSSM Sauce side</h3>
+
+<table>
+  <tr><th>Setting</th><th>Set it to</th></tr>
+  <tr><td>Bridge Mode</td><td><code>MCP</code> — then press Enable. Nothing else on this list applies
+    to that mode.</td></tr>
+  <tr><td colspan="2" style="background:#f4f7f8; font-weight:600; font-size:9pt;">Only if you are using
+    the XToys or Buttplug.io bridge instead</td></tr>
+  <tr><td>Speed Overrides → Minimum Duration</td><td><code>50 ms</code>. Default 500&nbsp;ms is far too
+    slow.</td></tr>
+  <tr><td>Stroke Smoothing</td><td><code>Linear</code>. <strong>Every launch</strong> — it is not
+    saved.</td></tr>
+  <tr><td>Get stroke duration from command</td><td>Ticked (XToys only). Otherwise our timing is
+    discarded.</td></tr>
+  <tr><td>Max Message Frequency</td><td>Ignore it. With stroke duration taken from the command it is
+    unused; it is a duration fallback, not a rate limit, and it never drops anything.</td></tr>
+</table>
+
+<h2>8 · Troubleshooting</h2>
+
+<table>
+  <tr><th>Symptom</th><th>Cause and fix</th></tr>
+
+  <tr><td>Panel cannot reach the server</td>
+      <td>OSSM&nbsp;Sauce is not running, the bridge is not <span class="kbd-path">Enable</span>d, or it
+      is in the wrong mode. Check the bridge is on <code>MCP</code> and the port matches the address in
+      Settings.</td></tr>
+
+  <tr><td>Connected, but the panel lists no device</td>
+      <td>The bridge is up and the OSSM is not attached to OSSM&nbsp;Sauce. Power the machine on and
+      let the app pick it up; the panel notices within a couple of seconds.</td></tr>
+
+  <tr><td>Connects, but the machine never moves</td>
+      <td>Same cause, on the older routes — but there the bridge discards every command while the
+      machine is absent and tells nobody, so the viewer looks perfectly healthy. Confirm the app shows
+      the OSSM connected. (The MCP route reports this properly, which is one reason it is the
+      default.)</td></tr>
+
+  <tr><td>Starts in sync, drifts later and later behind</td>
+      <td>On XToys or Buttplug.io, <span class="kbd-path">Minimum Duration</span> is still 500&nbsp;ms;
+      set it to 50. It cannot be the cause on the MCP route, which has no such clamp.</td></tr>
+
+  <tr><td>Motion pulses, or stops and restarts constantly</td>
+      <td>On XToys or Buttplug.io, <span class="kbd-path">Stroke Smoothing</span> is on <code>Sine</code>;
+      set it to <code>Linear</code>, and remember it resets every launch. The MCP route sets this per
+      command and is immune.</td></tr>
+
+  <tr><td>Every stroke feels the same speed; the shape is gone</td>
+      <td>XToys only: <span class="kbd-path">Get stroke duration from command</span> is unticked, so all
+      timing is being replaced by a fixed value.</td></tr>
+
+  <tr><td>Consistently a beat behind, but not drifting</td>
+      <td>Mechanical lag. Dial in a negative <span class="kbd-path">Sync offset</span>.</td></tr>
+
+  <tr><td>Stutters or falls behind on busy passages</td>
+      <td>Raise <span class="kbd-path">Minimum move</span> so fewer, longer commands are sent.</td></tr>
+
+  <tr><td>Stroke feels too deep or inverted</td>
+      <td><span class="kbd-path">Stroke range</span> and <span class="kbd-path">Invert direction</span>.</td></tr>
+
+  <tr><td>Panel stays grey on a video</td>
+      <td>That title has no <code>.bx</code> path, or device output is switched off in Settings.</td></tr>
+
+  <tr><td>Chrome asks about local network access</td>
+      <td>Expected on Chrome&nbsp;147 and later — the page is opening a connection to your own machine.
+      Allow it.</td></tr>
+
+  <tr><td>Nothing works in Safari over https</td>
+      <td>Safari blocks loopback WebSockets from a secure page outright. Use Chrome or Firefox, or serve
+      the viewer over <code>http://localhost</code>, where the restriction does not apply.</td></tr>
+
+  <tr><td>Vibration-only toy shows up on Intiface but never runs</td>
+      <td>Expected. Only positional devices are driven; there is no stroke-to-vibration fallback.</td></tr>
+</table>
+
+<h2 class="pagebreak">9 · Testing without hardware</h2>
+
+<p>The repository ships a fake server that pretends to be Intiface with one linear device attached, and
+prints every move it receives as a position bar. It is useful for confirming the viewer end works before
+you involve the machine.</p>
+
+<p class="mono" style="display:block; padding:8pt 10pt; line-height:1.7; white-space:pre;">bun run sim                    # listens on ws://127.0.0.1:12345
+bun run sim -- --port 47000    # somewhere else
+bun run sim -- --gap 50        # emulate a device with a 50 ms timing gap</p>
+
+<p>It speaks Buttplug, so switch <span class="kbd-path">Connection</span> to
+<span class="kbd-path">Intiface Central</span> and <code>ws://127.0.0.1:12345</code> while you use it,
+then switch back. Stop Intiface Central first if it is running — they cannot share the port.</p>
+
+<h2>10 · How it works</h2>
+
+<p>A pair of <code>.bx</code> markers describes a <em>curve</em>: go from depth A to depth B over so many
+frames, following a particular easing. Essentially no device understands that. What they all accept is
+"be at this position in this many milliseconds, travelling straight there."</p>
+
+<p>So the viewer converts the path in three steps. It reads the markers into timed curve segments, which
+loses nothing. It then flattens those into linear moves, subdividing only the curves that measurably
+deviate from a straight line and merging anything closer together than the device can accept. Finally a
+scheduler issues each move at the right moment against video time, handling seeks, pauses, and the
+occasional late frame — when a command goes out slightly late, its duration is shortened by exactly that
+amount so the machine still arrives on schedule.</p>
+
+<p>Two consequences are worth knowing. <strong>The easing you see is the easing the machine gets</strong>,
+because the curve is flattened here using the viewer's own easing code rather than being handed to the
+firmware to interpret. That also sidesteps a real incompatibility: OSSM firmware numbers its transition
+types differently from the editor, so five of the eight values mean a different curve on each side. We
+never send one. And <strong>the command rate stays low</strong> — across a typical library, plans run
+three to eight commands a second, so there is nothing here that a bridge or a motor should struggle
+with.</p>
+
+<p>On the MCP route the last step is literal: the viewer builds the ten-byte <code>SMOOTH_MOVE</code>
+frame the firmware expects — command byte, duration, depth on a 0–10,000 scale, transition, easing —
+hex-encodes it, and posts it. OSSM&nbsp;Sauce broadcasts those bytes to the machine without inspecting
+them. The transition byte is always <em>linear</em>, which is the correct choice precisely because the
+curve has already been flattened: each command is a straight segment, and the machine drawing it
+straight is what reproduces the original curve.</p>
+
+<h2>11 · Known limits</h2>
+
+<ul>
+  <li><strong>One device at a time</strong> — the first one that reports positional support.</li>
+  <li><strong>Positional devices only.</strong> A vibration-only toy will connect and be listed, but
+    nothing drives it.</li>
+  <li><strong>The XToys bridge never reports back.</strong> On that route the viewer can tell that
+    OSSM&nbsp;Sauce is running, but not whether the OSSM is. The MCP and Buttplug routes both report
+    device presence.</li>
+  <li><strong>The MCP route is OSSM-only.</strong> It speaks the firmware's command set directly, so
+    unlike the Buttplug route it is not a general transport for other hardware.</li>
+  <li><strong>Playback speed changes are not tracked.</strong> The player never changes playback rate,
+    and the timing would not follow it if it did.</li>
+  <li><strong>Buttplug message spec v3.</strong> Intiface 3.1 runs a v4 server but translates for older
+    clients, and OSSM&nbsp;Sauce's own bridge connects as v3 — which makes v3 the verified-compatible
+    choice rather than the outdated one.</li>
+</ul>
+
+<footer>
+  BX Viewer · Device output manual · Revision 2, 31 July 2026.
+  Reference documentation for maintainers is in <code>docs/device-output.md</code>.
+</footer>
+
+</body>
+</html>
