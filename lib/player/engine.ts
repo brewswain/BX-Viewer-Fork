@@ -134,6 +134,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
   const speedSliderEl = byId<HTMLInputElement>('speedSlider')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
+  const pathBtn = byId<HTMLButtonElement>('pathBtn')
   // Theater playlist drawer — both null outside the playlist page.
   const btnPlaylistDrawer = byId<HTMLButtonElement>('btnPlaylistDrawer')
   const btnCloseDrawer = byId<HTMLButtonElement>('btnTheaterSidebarClose')
@@ -152,6 +153,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let isOverlay = userSettings.defaultOverlay === true
   let overlayBg = userSettings.defaultOverlayBg === true
   let flipY = userSettings.defaultFlipY === true
+  // Purely a display switch — for videos that already have the path burned in.
+  // The .bx stays loaded and `onFrame` keeps reporting, so device output and
+  // the OSSM export are unaffected by it.
+  let pathHidden = false
   let isSeeking = false
   let wasPlayingBeforeSeek = false
   let seekingLongTimer: ReturnType<typeof setTimeout> | null = null
@@ -204,6 +209,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     flipYBtn.textContent = `flip Y: ${flipY ? 'on' : 'off'}`
     flipYBtn.classList.toggle('active', flipY)
   }
+  applyPathHidden()
 
   // ── Volume: restore persisted state ────────────────────────────────────────
   const savedVolume = sessionStorage.getItem('playerVolume')
@@ -280,21 +286,46 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   // ── Canvas rendering ────────────────────────────────────────────────────────
-  function drawBounceX() {
-    if (!activePath) return
-    const path = activePath
-    const W = canvas.width,
-      H = canvas.height
-    if (W === 0 || H === 0) return
-
-    ctx.clearRect(0, 0, W, H)
-
+  /** Frame index and interpolated depth under the playhead. */
+  function sampleAtPlayhead(path: Float32Array) {
     const curFrameExact = Math.min(
       (smoothTime - offsetSecs) * FPS,
       totalFrames - 1,
     )
     const curFrame = Math.floor(curFrameExact)
     const frac = curFrameExact - curFrame
+    const depthA = curFrame >= 0 && path[curFrame] >= 0 ? path[curFrame] : 0
+    const depthB =
+      curFrame >= 0
+        ? path[Math.min(curFrame + 1, totalFrames - 1)] >= 0
+          ? path[Math.min(curFrame + 1, totalFrames - 1)]
+          : depthA
+        : 0
+    const curDepth = depthA + (depthB - depthA) * (curFrame >= 0 ? frac : 0)
+    return { curFrameExact, curFrame, curDepth }
+  }
+
+  function drawBounceX() {
+    if (!activePath) return
+    const path = activePath
+
+    // Hidden: skip the paint but keep sampling, so the device driver and
+    // anything else on `onFrame` see an unbroken stream of depths.
+    if (pathHidden) {
+      if (onFrame) {
+        const s = sampleAtPlayhead(path)
+        onFrame(s.curFrame, s.curDepth)
+      }
+      return
+    }
+
+    const W = canvas.width,
+      H = canvas.height
+    if (W === 0 || H === 0) return
+
+    ctx.clearRect(0, 0, W, H)
+
+    const { curFrameExact, curFrame, curDepth } = sampleAtPlayhead(path)
     const ballX = W / 2
     const sliderValue = parseFloat(zoomSliderEl.value)
     const BALL_MARGIN = BALL_R + 2
@@ -316,14 +347,6 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     ctx.rect(0, EDGE_PAD, W, isOverlay ? H - EDGE_PAD : H - EDGE_PAD * 2)
     ctx.clip()
 
-    const depthA = curFrame >= 0 && path[curFrame] >= 0 ? path[curFrame] : 0
-    const depthB =
-      curFrame >= 0
-        ? path[Math.min(curFrame + 1, totalFrames - 1)] >= 0
-          ? path[Math.min(curFrame + 1, totalFrames - 1)]
-          : depthA
-        : 0
-    const curDepth = depthA + (depthB - depthA) * (curFrame >= 0 ? frac : 0)
     const displayDepth = flipY ? 1 - curDepth : curDepth
     const ballY = bottomY + displayDepth * (topY - bottomY)
     const isNearTop = flipY ? curDepth <= 0.01 : curDepth >= 0.99
@@ -668,6 +691,34 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   // ── Overlay toggles ─────────────────────────────────────────────────────────
+  /**
+   * Hiding the strip takes the whole wrap out of the layout — in normal mode the
+   * video gets those pixels back, and in overlay mode nothing is painted over
+   * it. The strip's own options (overlay, bg, flip Y) go dead while it is off
+   * screen rather than disappearing, so the row does not shift under the cursor.
+   */
+  function applyPathHidden() {
+    if (pathBtn) {
+      pathBtn.textContent = `path: ${pathHidden ? 'hidden' : 'shown'}`
+      pathBtn.classList.toggle('active', pathHidden)
+    }
+    bxWrap.classList.toggle('path-hidden', pathHidden)
+    overlayBtn.disabled = pathHidden
+    overlayBgBtn.disabled = pathHidden
+    if (flipYBtn) flipYBtn.disabled = pathHidden
+  }
+
+  if (pathBtn) {
+    on(pathBtn, 'click', () => {
+      pathHidden = !pathHidden
+      applyPathHidden()
+      // Coming back needs the canvas re-measured: it was sized against a
+      // display:none wrap while hidden.
+      resizeCanvas()
+      if (isFullscreen()) anchorOverlay()
+    })
+  }
+
   on(overlayBtn, 'click', () => {
     isOverlay = !isOverlay
     overlayBtn.textContent = `overlay: ${isOverlay ? 'on' : 'off'}`

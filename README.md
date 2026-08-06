@@ -22,6 +22,7 @@ This program was written with generative AI, with human intervention as well. I 
 - 🎭 Theater Mode: Unobstructed viewing experience for maximum immersion! On by default (`T` or `Esc` leaves it); turn the default off in Settings. The playlist slides in from the right as a drawer — `P`, or the list button in the control bar.
 - 🔁 Loop & Shuffle: Repeat the whole playlist, just the current video, or a single favourite — one extra play or forever — without duplicating it in the playlist. Looping works on single videos too, for content meant to run on repeat.
 - 📺 Classic Overlays: Generated on the fly, with the ability to disable the background dim!
+- 🙈 Hide the Path: `path: hidden` takes the strip off screen for videos that already have the path burned in — the `.bx` stays loaded, so device output and OSSM export carry on regardless.
 - 🔄 Y-Axis Flip: Need a different perspective? Flip the Y-axis with ease!
 - 📍 Multiple Paths Per Video: Perfect for difficulty selection or different route options!
 - 🎨 Color Customization: Make those paths your own with custom colors!

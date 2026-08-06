@@ -237,6 +237,13 @@ function PlayerControls({
       <div className="controls-row controls-row-secondary">
         <button
           className="overlay-toggle-btn"
+          id="pathBtn"
+          title="Show or hide the BounceX path — the .bx stays loaded either way"
+        >
+          path: shown
+        </button>
+        <button
+          className="overlay-toggle-btn"
           id="overlayBtn"
           title="Toggle BounceX overlay"
         >

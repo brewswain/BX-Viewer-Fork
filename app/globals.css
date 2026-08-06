@@ -716,6 +716,12 @@ body {
   border-top: 1px solid var(--border);
 }
 
+/* `path: hidden` — for videos that already have the path burned into the
+   picture. Display only: the .bx stays loaded and keeps driving the device. */
+.bouncex-wrap.path-hidden {
+  display: none;
+}
+
 .bouncex-wrap.overlay-mode {
   position: absolute;
   bottom: 0;
@@ -957,6 +963,17 @@ body {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-glow);
+}
+
+/* Strip options while the strip itself is hidden — kept in place so the row
+   does not reflow, but visibly dead. */
+.overlay-toggle-btn:disabled,
+.overlay-toggle-btn:disabled:hover {
+  opacity: 0.35;
+  cursor: default;
+  border-color: var(--border);
+  color: var(--text3);
+  background: var(--surface);
 }
 
 /* ── Video Info ── */
