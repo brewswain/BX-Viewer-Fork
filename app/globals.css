@@ -2391,6 +2391,9 @@ body::after {
 body.theater-mode {
   overflow: hidden;
   cursor: none;
+  /* One number for the drawer's width and the strip of viewport the player
+     gives up to it — they have to agree or the video sits under the sidebar. */
+  --theater-sidebar-w: min(380px, 90vw);
 }
 
 /* The controls only answer the bottom edge, so the pointer is the only feedback
@@ -2433,6 +2436,15 @@ body.theater-mode #playerContainer {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* Matches the drawer's slide so the two edges move together. */
+  transition: right 0.25s ease;
+}
+
+/* The drawer is a column, not a layer: the player's right edge stops where the
+   sidebar starts, and the video and .bx strip re-layout into what is left. The
+   canvas follows because the engine's ResizeObserver watches `bxWrap`. */
+body.theater-mode.theater-sidebar-open #playerContainer {
+  right: var(--theater-sidebar-w);
 }
 
 /* player-video-wrap grows to fill space above controls,
@@ -2484,8 +2496,9 @@ body.theater-mode #playerContainer.controls-visible .player-controls {
 
 /* ── Theater playlist drawer ───────────────────────────────────────────────
    The sidebar is the same element the normal layout uses; theater lifts it out
-   of the grid into a right-edge drawer over the fixed player. Closed by
-   default and reset on every entry — the engine owns `.theater-sidebar-open`.
+   of the grid into a fixed right-edge column that the player makes room for
+   rather than sits under. Closed by default and reset on every entry — the
+   engine owns `.theater-sidebar-open`.
    ------------------------------------------------------------------------- */
 
 body.theater-mode .player-sidebar {
@@ -2493,15 +2506,14 @@ body.theater-mode .player-sidebar {
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(380px, 90vw);
+  width: var(--theater-sidebar-w);
   z-index: 210;
   margin: 0;
   padding: 3rem 1rem 1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgba(8, 9, 13, 0.96);
+  background: var(--bg);
   border-left: 1px solid var(--border);
-  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.6);
   transform: translateX(100%);
   /* `visibility` keeps the off-screen drawer out of tab order and off the
      pointer, but it must wait for the slide-out to finish — hence the delay,
@@ -2520,6 +2532,18 @@ body.theater-mode.theater-sidebar-open .player-sidebar {
   transition:
     transform 0.25s ease,
     visibility 0s;
+}
+
+/* Narrow viewports have no width to give: a 90vw column would leave a sliver of
+   video, so the drawer goes back to floating over the picture there. */
+@media (max-width: 820px) {
+  body.theater-mode.theater-sidebar-open #playerContainer {
+    right: 0;
+  }
+  body.theater-mode .player-sidebar {
+    background: rgba(10, 11, 15, 0.96);
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.6);
+  }
 }
 
 .theater-sidebar-close {
