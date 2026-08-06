@@ -90,6 +90,70 @@ export function sequentialOrder(n: number): number[] {
   return Array.from({ length: n }, (_, i) => i)
 }
 
+// ── Loop controls ───────────────────────────────────────────────────────────
+// The control bar and the sidebar rows are two views of one fact, not two
+// settings: "repeat the track that is playing" is expressible from either, so
+// each derives its displayed mode from the whole prefs object rather than from
+// its own field. Without this the bar reads as dead — `all` only shows itself
+// at the end of the last track — and the two can disagree about the same track.
+
+/**
+ * What the control-bar loop button shows. A playlist mode wins when set;
+ * otherwise a current track pinned to `forever` from its row is the same intent
+ * as repeat-one, so the bar reflects it instead of reading as off.
+ */
+export function barLoopMode(
+  prefs: PlaylistPrefs,
+  currentFolder: string,
+): PlaylistLoopMode {
+  if (prefs.loop !== 'off') return prefs.loop
+  if (currentFolder && prefs.tracks[currentFolder] === 'forever') return 'one'
+  return 'off'
+}
+
+/** What a sidebar row shows. Repeat-one is a `forever` on the playing row. */
+export function rowLoopMode(
+  prefs: PlaylistPrefs,
+  folder: string,
+  currentFolder: string,
+): LoopMode {
+  if (prefs.loop === 'one' && folder === currentFolder) return 'forever'
+  return prefs.tracks[folder] || 'off'
+}
+
+/** Prefs after pressing the control-bar loop button: off → all → one → off. */
+export function cycleBarLoop(
+  prefs: PlaylistPrefs,
+  currentFolder: string,
+): PlaylistPrefs {
+  const loop = cyclePlaylistLoopMode(barLoopMode(prefs, currentFolder))
+  const tracks = { ...prefs.tracks }
+  // Leaving repeat-one has to release a ∞ pinned on the playing row too, or
+  // `barLoopMode` would derive `one` straight back on the next render.
+  if (loop !== 'one' && currentFolder && tracks[currentFolder] === 'forever')
+    delete tracks[currentFolder]
+  return { ...prefs, loop, tracks }
+}
+
+/** Prefs after pressing a sidebar row's repeat button: off → once → forever. */
+export function cycleRowLoop(
+  prefs: PlaylistPrefs,
+  folder: string,
+  currentFolder: string,
+): PlaylistPrefs {
+  const next = cycleLoopMode(rowLoopMode(prefs, folder, currentFolder))
+  const tracks = { ...prefs.tracks }
+  if (next === 'off') delete tracks[folder]
+  else tracks[folder] = next
+  // Same fact from the other side: taking the playing row off ∞ must clear
+  // playlist repeat-one, which is what was rendering that ∞.
+  const loop =
+    folder === currentFolder && prefs.loop === 'one' && next !== 'forever'
+      ? 'off'
+      : prefs.loop
+  return { ...prefs, loop, tracks }
+}
+
 // ── Persistence ─────────────────────────────────────────────────────────────
 // Playback preferences are per-item and open-ended, so they live under their own
 // keys rather than in the single `bx_viewer_settings` blob, which is a fixed

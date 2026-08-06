@@ -29,16 +29,22 @@ import { FPS, PLAYLIST_BASE, VIDEO_BASE } from '@/lib/player/constants'
 import { createPlayerEngine, type PlayerEngine } from '@/lib/player/engine'
 import {
   advance,
-  cycleLoopMode,
-  cyclePlaylistLoopMode,
-  EMPTY_PLAYLIST_PREFS,
-  loadPlaylistPrefs,
-  savePlaylistPrefs,
-  sequentialOrder,
-  shuffledOrder,
+  barLoopMode,
+  rowLoopMode,
   type LoopMode,
-  type PlaylistPrefs,
 } from '@/lib/player/playback'
+import {
+  cycleLoop,
+  cycleTrackRepeat,
+  getPlaybackState,
+  initPlayback,
+  noteRepeat,
+  reshuffle,
+  setCurrentTrack,
+  setTrackCount,
+  toggleShuffle,
+  usePlayback,
+} from '@/lib/player/playbackStore'
 import { fetchJSON, fetchText, framesToTimecode, renderDescription } from '@/lib/player/format'
 import type {
   BxEffect,
@@ -94,25 +100,17 @@ function PlaylistInner() {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [emptyPlaylist, setEmptyPlaylist] = useState(false)
-  const [currentIndex, setCurrentIndex] = useState(0)
   const [bxSelect, setBxSelect] = useState<BxSelectState>(null)
+  // Loop / shuffle / per-track repeat, plus which track is playing. External so
+  // the engine's `onEnded` — built once per playlist — can read it at event time
+  // without the page keeping a mirror ref beside a piece of state.
+  const { prefs, currentIndex, currentFolder } = usePlayback()
   // The user's variant picks, keyed by track index. Recorded rather than left in
   // the dropdown so a revisited track keeps its pick and the OSSM export sends
   // the paths that were actually played. The ref is what `loadTrack` reads: it
   // lives inside an effect that deliberately doesn't re-run on state changes.
   const [bxOverrides, setBxOverrides] = useState<Record<number, string>>({})
   const bxOverridesRef = useRef<Record<number, string>>({})
-
-  // Loop / shuffle. Same ref-beside-state shape as `bxOverrides`, and for the
-  // same reason: the engine effect must not re-run when a toggle flips.
-  const [prefs, setPrefs] = useState<PlaylistPrefs>(EMPTY_PLAYLIST_PREFS)
-  const prefsRef = useRef<PlaylistPrefs>(EMPTY_PLAYLIST_PREFS)
-  /** Track indices in play order — shuffled or the identity permutation. */
-  const orderRef = useRef<number[]>([])
-  /** Where the playing track sits *in `orderRef`*, not its playlist index. */
-  const positionRef = useRef(0)
-  /** Extra plays the current track has had, for resolving a `once` repeat. */
-  const repeatsUsedRef = useRef(0)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -130,15 +128,12 @@ function PlaylistInner() {
     setLoaded(null)
     setErrorMsg(null)
     setEmptyPlaylist(false)
-    setCurrentIndex(0)
     setBxSelect(null)
     bxOverridesRef.current = {}
     setBxOverrides({})
-    // localStorage is client-only, so this is read here rather than seeded into
-    // useState, which would run on the server and desync hydration.
-    const storedPrefs = loadPlaylistPrefs(playlistId)
-    prefsRef.current = storedPrefs
-    setPrefs(storedPrefs)
+    // The store reads localStorage, so it is seeded here rather than during
+    // render, which also runs on the server and would desync hydration.
+    initPlayback(playlistId)
 
     async function loadPlaylist(id: string) {
       try {
@@ -196,12 +191,8 @@ function PlaylistInner() {
 
     const { metas } = loaded
     const userSettings = getSettings()
-    let trackIndex = 0
 
-    orderRef.current = prefsRef.current.shuffle
-      ? shuffledOrder(metas.length)
-      : sequentialOrder(metas.length)
-    positionRef.current = 0
+    setTrackCount(metas.length)
 
     const deviceConfig = deviceConfigFromSettings(userSettings)
     deviceManager.configure(deviceConfig)
@@ -218,28 +209,24 @@ function PlaylistInner() {
       onEnded() {
         // Native looping (see the `video.loop` effect) swallows `ended`, so
         // anything that gets here either advances or has a `once` repeat left.
-        const prefsNow = prefsRef.current
-        const folder = metas[trackIndex]?._folder ?? ''
+        const now = getPlaybackState()
         const result = advance({
-          order: orderRef.current,
-          position: positionRef.current,
-          loop: prefsNow.loop,
-          trackLoop: prefsNow.tracks[folder] || 'off',
-          repeatsUsed: repeatsUsedRef.current,
+          order: now.order,
+          position: now.position,
+          loop: now.prefs.loop,
+          trackLoop: now.prefs.tracks[now.currentFolder] || 'off',
+          repeatsUsed: now.repeatsUsed,
         })
         if (result.action === 'stop') return
         if (result.action === 'repeat') {
-          repeatsUsedRef.current += 1
+          noteRepeat()
           video!.currentTime = 0
           engine.resetSmoothTime()
           void video!.play().catch(() => {})
           return
         }
-        // Reshuffle on every pass, or repeat-all would replay one fixed order.
-        if (result.wrapped && prefsNow.shuffle) {
-          orderRef.current = shuffledOrder(metas.length)
-        }
-        loadTrack(orderRef.current[result.position])
+        if (result.wrapped && now.prefs.shuffle) reshuffle(metas.length)
+        loadTrack(getPlaybackState().order[result.position])
       },
       onFrame(curFrame) {
         // Same contract as the watch page: `curFrame` is already smoothed and
@@ -253,18 +240,11 @@ function PlaylistInner() {
     engineRef.current = engine
 
     async function loadTrack(index: number) {
-      trackIndex = index
       const meta = metas[index]
       const folder = meta._folder
-      // A track reached by clicking the list is not necessarily the next one in
-      // play order, so the position is derived from the order rather than kept
-      // in step with it.
-      const atPosition = orderRef.current.indexOf(index)
-      positionRef.current = atPosition >= 0 ? atPosition : 0
-      repeatsUsedRef.current = 0
-
-      // Title / authors / description / track counters all re-render from this
-      setCurrentIndex(index)
+      // Title / authors / description / track counters, the active row, and the
+      // loop button's "current track" all re-render from this.
+      setCurrentTrack(index, folder)
 
       // Highlight active track in the sidebar list
       const activeEl = document.getElementById(`ptrack-${index}`)
@@ -331,7 +311,7 @@ function PlaylistInner() {
     loadTrackRef.current = loadTrack
 
     // ── Start first track ─────────────────────────────────────────────────────
-    loadTrack(orderRef.current[0] ?? 0)
+    loadTrack(getPlaybackState().order[0] ?? 0)
 
     return () => {
       engine.destroy()
@@ -344,53 +324,23 @@ function PlaylistInner() {
 
   // ── Loop / shuffle ──────────────────────────────────────────────────────────
 
-  function updatePrefs(next: PlaylistPrefs) {
-    prefsRef.current = next
-    setPrefs(next)
-    if (playlistId) savePlaylistPrefs(playlistId, next)
-  }
-
   /**
    * Only the modes that never advance may use the element's own loop: it is
    * gapless where an `ended` + seek is not, but it also suppresses `ended`,
-   * which is where a `once` repeat is counted.
+   * which is where a `once` repeat is counted. `rowLoopMode` folds repeat-one
+   * in, so this is the same fact the sidebar row draws.
    */
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !loaded) return
-    const folder = loaded.metas[currentIndex]?._folder
-    const trackLoop = folder ? prefs.tracks[folder] || 'off' : 'off'
-    video.loop = trackLoop === 'forever' || prefs.loop === 'one'
-  }, [loaded, currentIndex, prefs])
-
-  function toggleShuffle() {
-    const shuffle = !prefs.shuffle
-    const count = loaded?.metas.length ?? 0
-    // Pin the playing track to the front so flipping shuffle mid-video does not
-    // cut it off; unshuffling just restores playlist order around it.
-    orderRef.current = shuffle
-      ? shuffledOrder(count, currentIndex)
-      : sequentialOrder(count)
-    const at = orderRef.current.indexOf(currentIndex)
-    positionRef.current = at >= 0 ? at : 0
-    updatePrefs({ ...prefs, shuffle })
-  }
-
-  function cycleTrackRepeat(folder: string) {
-    const next = cycleLoopMode(prefs.tracks[folder] || 'off')
-    const tracks = { ...prefs.tracks }
-    if (next === 'off') delete tracks[folder]
-    else tracks[folder] = next
-    // Changing the setting mid-play restarts the allowance for this pass.
-    if (loaded?.metas[currentIndex]?._folder === folder) repeatsUsedRef.current = 0
-    updatePrefs({ ...prefs, tracks })
-  }
+    if (!video || !currentFolder) return
+    video.loop = rowLoopMode(prefs, currentFolder, currentFolder) === 'forever'
+  }, [prefs, currentFolder])
 
   /** Prev/next follow play order, and wrap only when repeat-all is on. */
   function stepTrack(delta: number) {
-    const order = orderRef.current
+    const { order, position } = getPlaybackState()
     if (order.length === 0) return
-    let pos = positionRef.current + delta
+    let pos = position + delta
     if (pos < 0) pos = prefs.loop === 'all' ? order.length - 1 : 0
     if (pos >= order.length) pos = prefs.loop === 'all' ? 0 : order.length - 1
     loadTrackRef.current?.(order[pos])
@@ -530,12 +480,10 @@ function PlaylistInner() {
               hasPrevNext
               hasFlipY
               hasPlaylistDrawer
-              loopMode={prefs.loop}
-              onCycleLoop={() =>
-                updatePrefs({ ...prefs, loop: cyclePlaylistLoopMode(prefs.loop) })
-              }
+              loopMode={barLoopMode(prefs, currentFolder)}
+              onCycleLoop={cycleLoop}
               shuffle={prefs.shuffle}
-              onToggleShuffle={toggleShuffle}
+              onToggleShuffle={() => toggleShuffle(metas.length)}
               totalCount={metas.length}
               trackDisplay={`${currentIndex + 1} / ${metas.length}`}
               bxSelect={bxSelectNode}
@@ -654,7 +602,7 @@ function PlaylistInner() {
                     </div>
                     <div className="ptrack-duration">{timecode}</div>
                     <TrackRepeatButton
-                      mode={prefs.tracks[folder] || 'off'}
+                      mode={rowLoopMode(prefs, folder, currentFolder)}
                       onCycle={() => cycleTrackRepeat(folder)}
                     />
                   </div>
