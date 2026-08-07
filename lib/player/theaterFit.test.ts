@@ -37,8 +37,11 @@ describe('theaterFit', () => {
   })
 
   test('zooms only once the stretch is capped', () => {
+    // Caps passed explicitly: the shipped MAX_ZOOM is 1, so the defaults can no
+    // longer show the ordering this asserts — stretch spends itself first, and
+    // only what it cannot close falls through to zoom.
     // 16:9 in a 2.4:1 stage — a 1.35 gap, past what stretch alone may close.
-    const fit = theaterFit(2400, 1000, 1920, 1080)
+    const fit = theaterFit(2400, 1000, 1920, 1080, { maxZoom: 1.05 })
     expect(fit.scaleY).toBeGreaterThan(1)
     expect(fit.scaleX / fit.scaleY).toBeCloseTo(MAX_STRETCH, 4)
   })
