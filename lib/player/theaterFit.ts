@@ -20,8 +20,15 @@
 
 /** Widest anamorphic stretch allowed, as a multiple of the true width. */
 export const MAX_STRETCH = 1.2
-/** Deepest zoom allowed; 1.15 crops ~13% of the picture's height. */
-export const MAX_ZOOM = 1.15
+/**
+ * Deepest zoom allowed — deliberately a token amount. Zoom is the move that
+ * costs picture, and what it costs first is the bottom edge, which is where a
+ * video with the path burned into the frame keeps its path. Crop far enough and
+ * that burned-in path is clipped by the strip below it, and the two read as one
+ * overlapping mess. 1.05 crops ~2% off each edge: enough to be worth doing,
+ * not enough to reach anything.
+ */
+export const MAX_ZOOM = 1.05
 
 export type TheaterFit = {
   /** Horizontal scale to apply to the video element. */

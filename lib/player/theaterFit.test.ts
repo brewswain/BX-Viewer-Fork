@@ -51,7 +51,7 @@ describe('theaterFit', () => {
   })
 
   test('closes the gap exactly when the caps allow it', () => {
-    const gap = 1.3
+    const gap = MAX_STRETCH * MAX_ZOOM // the widest gap the caps can close
     const fit = theaterFit(1920 * gap, 1080, 1920, 1080)
     expect(fit.scaleX).toBeCloseTo(gap, 4)
   })
