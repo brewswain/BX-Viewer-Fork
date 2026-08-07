@@ -31,7 +31,13 @@ import {
   getEffectiveColorRgb,
   hexToRgbArr,
 } from './format'
-import { fitTransform, theaterFit } from './theaterFit'
+import {
+  clampStretch,
+  clampZoom,
+  fitTransform,
+  theaterFit,
+  type TheaterFit,
+} from './theaterFit'
 import type { BxEffect } from './types'
 
 export type PlayerEngineOptions = {
@@ -96,6 +102,25 @@ function byId<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T
 }
 
+/**
+ * Whether a keystroke belongs to something the user is typing or dragging in,
+ * in which case the player's shortcuts must stay out of its way — Space in a
+ * comment box types a space, it does not toggle playback.
+ *
+ * `contentEditable` is checked alongside the tags because a rich-text field is
+ * an ordinary <div> as far as `tagName` is concerned.
+ */
+function isTypingTarget(e: KeyboardEvent): boolean {
+  const el = e.target as HTMLElement | null
+  if (!el) return false
+  return (
+    el.tagName === 'INPUT' ||
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'SELECT' ||
+    el.isContentEditable
+  )
+}
+
 export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const {
     video,
@@ -131,6 +156,15 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const volumeSlider = byId<HTMLInputElement>('volumeSlider')
   const btnFullscreen = byId<HTMLButtonElement>('btnFullscreen')
   const btnTheater = byId<HTMLButtonElement>('btnTheater')
+  // Theater fit popover — null on any page that renders its own control bar.
+  const btnTheaterFit = byId<HTMLButtonElement>('btnTheaterFit')
+  const fitPopover = byId<HTMLElement>('theaterFitPopover')
+  const fitStretchSlider = byId<HTMLInputElement>('theaterStretchSlider')
+  const fitZoomSlider = byId<HTMLInputElement>('theaterZoomSlider')
+  const fitStretchValue = byId<HTMLElement>('theaterStretchValue')
+  const fitZoomValue = byId<HTMLElement>('theaterZoomValue')
+  const fitHint = byId<HTMLElement>('theaterFitHint')
+  const btnFitReset = byId<HTMLButtonElement>('btnTheaterFitReset')
   const progressWrap = byId<HTMLElement>('progressWrap')
   const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
   const speedSliderEl = byId<HTMLInputElement>('speedSlider')
@@ -165,6 +199,13 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let hideControlsTimer: ReturnType<typeof setTimeout> | null = null
   let cursorTimer: ReturnType<typeof setTimeout> | null = null
   let isTheater = false
+  // The persisted starting point, and the live copy the popover drags. Kept
+  // apart so Reset has something to go back to without re-reading storage.
+  const storedLimits = {
+    maxStretch: clampStretch(userSettings.theaterMaxStretch),
+    maxZoom: clampZoom(userSettings.theaterMaxZoom),
+  }
+  const fitLimits = { ...storedLimits }
 
   // Teardown bookkeeping (not part of the legacy engine)
   const cleanups: Array<() => void> = []
@@ -300,14 +341,15 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       video.style.transform = ''
       return
     }
-    video.style.transform = fitTransform(
-      theaterFit(
-        video.clientWidth,
-        video.clientHeight,
-        video.videoWidth,
-        video.videoHeight,
-      ),
+    const fit = theaterFit(
+      video.clientWidth,
+      video.clientHeight,
+      video.videoWidth,
+      video.videoHeight,
+      fitLimits,
     )
+    video.style.transform = fitTransform(fit)
+    reportFit(fit)
   }
 
   // ── Canvas rendering ────────────────────────────────────────────────────────
@@ -828,8 +870,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   })
 
   on(document, 'keydown', (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement | null
-    if (target?.tagName === 'INPUT' || target?.tagName === 'SELECT') return
+    if (isTypingTarget(e)) return
     if (e.code === 'Space') {
       e.preventDefault()
       togglePlay()
@@ -996,6 +1037,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   function hideControls() {
+    // The fit popover hangs off the bar; taking the bar away mid-drag would
+    // take the sliders with it. Every hide path funnels through here.
+    if (isFitPopoverOpen()) return
     if (hideControlsTimer) clearTimeout(hideControlsTimer)
     const container = byId<HTMLElement>('playerContainer')
     const controls = container.querySelector('.player-controls')
@@ -1093,6 +1137,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   function exitTheater() {
     isTheater = false
     if (cursorTimer) clearTimeout(cursorTimer)
+    setFitPopover(false) // before hideControls, which refuses to run under it
     setPlaylistDrawer(false)
     document.body.classList.remove('theater-mode', 'pointer-active')
     if (btnTheater) btnTheater.classList.remove('active')
@@ -1106,6 +1151,91 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       isTheater ? exitTheater() : enterTheater()
     })
   }
+
+  // ── Theater fit popover ─────────────────────────────────────────────────────
+  // The caps are tuned by watching footage, so the control lives on the picture
+  // rather than on the settings page. The stored values are the starting point;
+  // dragging here overrides them for the session and is never written back —
+  // "what looks right for this video" and "what should every video start at"
+  // are different questions, and only the settings page answers the second.
+
+  function setFitPopover(open: boolean) {
+    if (!fitPopover || !btnTheaterFit) return
+    fitPopover.hidden = !open
+    btnTheaterFit.classList.toggle('active', open)
+    btnTheaterFit.setAttribute('aria-expanded', String(open))
+    // Reaching for a slider means moving the pointer off the bottom edge, which
+    // is the gesture that normally dismisses the bar. Pin it while open.
+    if (open) showControls(true)
+  }
+
+  function isFitPopoverOpen(): boolean {
+    return !!fitPopover && !fitPopover.hidden
+  }
+
+  /** Push the current caps into the sliders and their readouts. */
+  function syncFitControls() {
+    if (fitStretchSlider) fitStretchSlider.value = String(fitLimits.maxStretch)
+    if (fitZoomSlider) fitZoomSlider.value = String(fitLimits.maxZoom)
+    if (fitStretchValue)
+      fitStretchValue.textContent = `${fitLimits.maxStretch.toFixed(2)}×`
+    if (fitZoomValue) fitZoomValue.textContent = `${fitLimits.maxZoom.toFixed(2)}×`
+  }
+
+  /**
+   * What the caps actually bought on this video. A cap is a ceiling, not a
+   * setting: on a video whose gap is already closed, dragging stretch to 1.6
+   * changes nothing on screen, and without this the control looks broken.
+   */
+  function reportFit(fit: TheaterFit) {
+    if (!fitHint) return
+    if (fit.scaleX === 1 && fit.scaleY === 1) {
+      fitHint.textContent = 'no bars to close'
+      return
+    }
+    const stretch = fit.scaleX / fit.scaleY
+    fitHint.textContent = `${stretch.toFixed(2)}× wide · ${fit.scaleY.toFixed(2)}× zoom`
+  }
+
+  if (btnTheaterFit) {
+    on(btnTheaterFit, 'click', (e: MouseEvent) => {
+      e.stopPropagation()
+      setFitPopover(!isFitPopoverOpen())
+    })
+  }
+  if (fitPopover) {
+    // The popover overlaps the picture, where a click is play/pause and a
+    // pointer move re-arms the auto-hide. Neither should reach past it.
+    on(fitPopover, 'click', (e: MouseEvent) => e.stopPropagation())
+    on(fitPopover, 'mousemove', (e: MouseEvent) => e.stopPropagation())
+  }
+  if (fitStretchSlider) {
+    on(fitStretchSlider, 'input', () => {
+      fitLimits.maxStretch = clampStretch(parseFloat(fitStretchSlider.value))
+      syncFitControls()
+      applyTheaterFit()
+    })
+  }
+  if (fitZoomSlider) {
+    on(fitZoomSlider, 'input', () => {
+      fitLimits.maxZoom = clampZoom(parseFloat(fitZoomSlider.value))
+      syncFitControls()
+      applyTheaterFit()
+    })
+  }
+  if (btnFitReset) {
+    on(btnFitReset, 'click', () => {
+      fitLimits.maxStretch = storedLimits.maxStretch
+      fitLimits.maxZoom = storedLimits.maxZoom
+      syncFitControls()
+      applyTheaterFit()
+    })
+  }
+  // Anywhere else dismisses it, the same way the pointer leaving the bar does.
+  on(document, 'click', () => {
+    if (isFitPopoverOpen()) setFitPopover(false)
+  })
+  syncFitControls()
 
   // ── Theater playlist drawer ─────────────────────────────────────────────────
   // The sidebar is laid out by the page; theater only decides whether it is on
@@ -1129,23 +1259,22 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   on(document, 'keydown', (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement | null
-    if (
-      target?.tagName === 'INPUT' ||
-      target?.tagName === 'TEXTAREA' ||
-      target?.tagName === 'SELECT'
-    )
-      return
+    if (isTypingTarget(e)) return
     if (e.key === 't' || e.key === 'T') {
       isTheater ? exitTheater() : enterTheater()
     }
     if ((e.key === 'p' || e.key === 'P') && isTheater && btnPlaylistDrawer) {
       setPlaylistDrawer(!isDrawerOpen())
     }
+    if ((e.key === 'f' || e.key === 'F') && isTheater && btnTheaterFit) {
+      setFitPopover(!isFitPopoverOpen())
+    }
     if (e.key === 'Escape' && isTheater) {
-      // The drawer is the innermost thing Escape can dismiss; only once it is
-      // gone does Escape mean "leave theater".
-      isDrawerOpen() ? setPlaylistDrawer(false) : exitTheater()
+      // Escape unwinds one layer at a time, innermost first, and only means
+      // "leave theater" once nothing is left on top of the picture.
+      if (isFitPopoverOpen()) setFitPopover(false)
+      else if (isDrawerOpen()) setPlaylistDrawer(false)
+      else exitTheater()
     }
   })
 

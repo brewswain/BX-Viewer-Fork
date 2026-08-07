@@ -29,6 +29,36 @@ export const MAX_STRETCH = 1.3
  */
 export const MAX_ZOOM = 1.0
 
+/**
+ * How far the live controls (and any stored override) may push each cap.
+ *
+ * The floor is 1 for both — below it the "fit" would shrink the picture, which
+ * is not a thing theater has any use for. The ceilings are where the tradeoff
+ * stops being worth offering: past ~1.6 the anamorphic warp reads as a funhouse
+ * mirror, and past ~1.4 zoom eats the burned-in path at the bottom edge no
+ * matter what the footage is.
+ */
+export const STRETCH_RANGE = { min: 1, max: 1.6, step: 0.02 } as const
+export const ZOOM_RANGE = { min: 1, max: 1.4, step: 0.02 } as const
+
+/** A cap coerced into range, falling back to the shipped default. */
+export function clampStretch(n: unknown): number {
+  return clampTo(n, STRETCH_RANGE, MAX_STRETCH)
+}
+
+export function clampZoom(n: unknown): number {
+  return clampTo(n, ZOOM_RANGE, MAX_ZOOM)
+}
+
+function clampTo(
+  n: unknown,
+  range: { min: number; max: number },
+  fallback: number,
+): number {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return fallback
+  return Math.min(range.max, Math.max(range.min, n))
+}
+
 export type TheaterFit = {
   /** Horizontal scale to apply to the video element. */
   scaleX: number

@@ -4,6 +4,8 @@
  * preferences.
  */
 
+import { MAX_STRETCH, MAX_ZOOM } from './player/theaterFit'
+
 export const BX_SETTINGS_KEY = 'bx_viewer_settings'
 
 export type Settings = {
@@ -22,6 +24,14 @@ export type Settings = {
   defaultTheater: boolean
   defaultZoom: number
   defaultPathSpeed: number
+  /**
+   * Starting theater-fit caps. Flat and prefixed for the same reason the device
+   * keys are: `getSettings` merges one level deep, so a nested object would not
+   * pick up new keys for existing installs. The in-player popover overrides
+   * these for the session without writing them back.
+   */
+  theaterMaxStretch: number
+  theaterMaxZoom: number
   effectsColorEnabled: boolean
   effectsTextEnabled: boolean
   effectsSpeedEnabled: boolean
@@ -68,6 +78,8 @@ export const DEFAULTS: Settings = {
   defaultTheater: true,
   defaultZoom: 0.25,
   defaultPathSpeed: 1.0,
+  theaterMaxStretch: MAX_STRETCH,
+  theaterMaxZoom: MAX_ZOOM,
   effectsColorEnabled: true,
   effectsTextEnabled: true,
   effectsSpeedEnabled: true,

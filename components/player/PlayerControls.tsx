@@ -3,6 +3,7 @@
 import { memo, type ReactNode } from 'react'
 
 import type { LoopMode, PlaylistLoopMode } from '@/lib/player/playback'
+import { STRETCH_RANGE, ZOOM_RANGE } from '@/lib/player/theaterFit'
 
 /**
  * Progress bar plus the two control rows. The engine binds to these elements
@@ -202,27 +203,92 @@ function PlayerControls({
           </button>
         )}
 
-        <button className="ctrl-btn" id="btnTheater" title="Theater mode">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            id="theaterIcon"
+        {/* The fit popover anchors to this pair, so they share a positioned
+            wrapper rather than sitting loose in the controls row. */}
+        <div className="theater-fit-wrap">
+          <button className="ctrl-btn" id="btnTheater" title="Theater mode (T)">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              id="theaterIcon"
+            >
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <rect
+                x="5"
+                y="7"
+                width="14"
+                height="10"
+                rx="1"
+                fill="currentColor"
+                stroke="none"
+                opacity="0.35"
+              />
+            </svg>
+          </button>
+          <button
+            className="ctrl-btn theater-only theater-fit-btn"
+            id="btnTheaterFit"
+            title="Fit the picture to the stage (F)"
+            aria-label="Theater fit"
+            aria-expanded="false"
+            aria-controls="theaterFitPopover"
           >
-            <rect x="2" y="4" width="20" height="16" rx="2" />
-            <rect
-              x="5"
-              y="7"
-              width="14"
-              height="10"
-              rx="1"
-              fill="currentColor"
-              stroke="none"
-              opacity="0.35"
-            />
-          </svg>
-        </button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6,8 2,12 6,16" />
+              <polyline points="18,8 22,12 18,16" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          </button>
+          <div
+            className="theater-fit-popover"
+            id="theaterFitPopover"
+            role="group"
+            aria-label="Theater fit"
+            hidden
+          >
+            <label className="theater-fit-row">
+              <span className="theater-fit-label">Stretch</span>
+              {/* Value comes from the engine once settings are read — these are
+                  only the bounds, so the track is right on first paint. */}
+              <input
+                type="range"
+                id="theaterStretchSlider"
+                className="theater-fit-slider"
+                min={STRETCH_RANGE.min}
+                max={STRETCH_RANGE.max}
+                step={STRETCH_RANGE.step}
+                defaultValue={STRETCH_RANGE.min}
+              />
+              <span className="theater-fit-value" id="theaterStretchValue">
+                1.00×
+              </span>
+            </label>
+            <label className="theater-fit-row">
+              <span className="theater-fit-label">Zoom</span>
+              <input
+                type="range"
+                id="theaterZoomSlider"
+                className="theater-fit-slider"
+                min={ZOOM_RANGE.min}
+                max={ZOOM_RANGE.max}
+                step={ZOOM_RANGE.step}
+                defaultValue={ZOOM_RANGE.min}
+              />
+              <span className="theater-fit-value" id="theaterZoomValue">
+                1.00×
+              </span>
+            </label>
+            <div className="theater-fit-actions">
+              <span className="theater-fit-hint" id="theaterFitHint"></span>
+              <button type="button" className="theater-fit-reset" id="btnTheaterFitReset">
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
         <button className="ctrl-btn" id="btnFullscreen" title="Fullscreen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="15,3 21,3 21,9" />

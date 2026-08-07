@@ -10,6 +10,10 @@ import { describe, expect, test } from 'bun:test'
 import {
   MAX_STRETCH,
   MAX_ZOOM,
+  STRETCH_RANGE,
+  ZOOM_RANGE,
+  clampStretch,
+  clampZoom,
   fitTransform,
   theaterFit,
 } from './theaterFit'
@@ -84,6 +88,38 @@ describe('theaterFit', () => {
     expect(theaterFit(1920, 0, 1920, 1080)).toEqual(IDENTITY_CHECK) // mid-transition
     expect(theaterFit(NaN, 800, 1920, 1080)).toEqual(IDENTITY_CHECK)
     expect(theaterFit(-100, 800, 1920, 1080)).toEqual(IDENTITY_CHECK)
+  })
+})
+
+/**
+ * The caps arrive from two places that can both hand over rubbish: a slider's
+ * `parseFloat` (NaN on an empty value) and a settings blob written by an older
+ * build, which simply has no such key. Either one reaching `theaterFit` unclamped
+ * is a NaN transform and a blank picture.
+ */
+describe('cap clamping', () => {
+  test('falls back to the shipped default for anything unusable', () => {
+    for (const bad of [undefined, null, NaN, 'wide', {}]) {
+      expect(clampStretch(bad)).toBe(MAX_STRETCH)
+      expect(clampZoom(bad)).toBe(MAX_ZOOM)
+    }
+  })
+
+  test('holds values inside the range the controls offer', () => {
+    expect(clampStretch(99)).toBe(STRETCH_RANGE.max)
+    expect(clampStretch(0.2)).toBe(STRETCH_RANGE.min)
+    expect(clampZoom(99)).toBe(ZOOM_RANGE.max)
+    expect(clampZoom(-1)).toBe(ZOOM_RANGE.min)
+  })
+
+  test('passes an in-range value through untouched', () => {
+    expect(clampStretch(1.42)).toBe(1.42)
+    expect(clampZoom(1.1)).toBe(1.1)
+  })
+
+  test('the shipped defaults are themselves in range', () => {
+    expect(clampStretch(MAX_STRETCH)).toBe(MAX_STRETCH)
+    expect(clampZoom(MAX_ZOOM)).toBe(MAX_ZOOM)
   })
 })
 

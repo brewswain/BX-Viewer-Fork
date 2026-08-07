@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import SiteHeader from '@/components/SiteHeader'
 import { deviceManager } from '@/lib/device/manager'
 import {
+  STRETCH_RANGE,
+  ZOOM_RANGE,
+  clampStretch,
+  clampZoom,
+} from '@/lib/player/theaterFit'
+import {
   DEFAULTS,
   deviceConfigFromSettings,
   getSettings,
@@ -32,6 +38,8 @@ type FormState = {
   /** Kept as strings — these mirror the raw <input> values, as the DOM did. */
   defaultZoom: string
   defaultPathSpeed: string
+  theaterMaxStretch: string
+  theaterMaxZoom: string
   effectsColorEnabled: boolean
   effectsTextEnabled: boolean
   effectsSpeedEnabled: boolean
@@ -77,6 +85,8 @@ function toForm(s: Settings): FormState {
     defaultTheater: s.defaultTheater !== false,
     defaultZoom: String(s.defaultZoom),
     defaultPathSpeed: String(s.defaultPathSpeed),
+    theaterMaxStretch: String(clampStretch(s.theaterMaxStretch)),
+    theaterMaxZoom: String(clampZoom(s.theaterMaxZoom)),
     effectsColorEnabled: s.effectsColorEnabled !== false,
     effectsTextEnabled: s.effectsTextEnabled !== false,
     effectsSpeedEnabled: s.effectsSpeedEnabled !== false,
@@ -146,6 +156,8 @@ export default function SettingsPage() {
       defaultTheater: form.defaultTheater,
       defaultZoom: parseFloat(form.defaultZoom),
       defaultPathSpeed: parseFloat(form.defaultPathSpeed),
+      theaterMaxStretch: clampStretch(parseFloat(form.theaterMaxStretch)),
+      theaterMaxZoom: clampZoom(parseFloat(form.theaterMaxZoom)),
       effectsColorEnabled: form.effectsColorEnabled,
       effectsTextEnabled: form.effectsTextEnabled,
       effectsSpeedEnabled: form.effectsSpeedEnabled,
@@ -391,6 +403,58 @@ export default function SettingsPage() {
                   {form.defaultPathSpeed}×
                 </span>
               </label>
+            </section>
+
+            <section className="settings-section">
+              <h2 className="settings-section-title">Theater fit</h2>
+              <p className="settings-hint">
+                Theater keeps the .bx strip on screen, so the box left for the
+                video is wider than the video is — these cap how far the picture
+                is pushed out to close the bars that leaves. Both are ceilings:
+                a video that already fills the stage ignores them. Tune them
+                against real footage from the fit button in the player; this is
+                only where every video starts.
+              </p>
+              <label className="settings-row settings-row-slider">
+                <span className="settings-label">Max stretch</span>
+                <input
+                  type="range"
+                  id="theaterMaxStretch"
+                  name="theaterMaxStretch"
+                  className="settings-zoom-slider"
+                  min={STRETCH_RANGE.min}
+                  max={STRETCH_RANGE.max}
+                  step={STRETCH_RANGE.step}
+                  value={form.theaterMaxStretch}
+                  onChange={(e) => set('theaterMaxStretch', e.target.value)}
+                />
+                <span className="settings-zoom-value" id="theaterMaxStretchValue">
+                  {form.theaterMaxStretch}×
+                </span>
+              </label>
+              <label className="settings-row settings-row-slider">
+                <span className="settings-label">Max zoom</span>
+                <input
+                  type="range"
+                  id="theaterMaxZoom"
+                  name="theaterMaxZoom"
+                  className="settings-zoom-slider"
+                  min={ZOOM_RANGE.min}
+                  max={ZOOM_RANGE.max}
+                  step={ZOOM_RANGE.step}
+                  value={form.theaterMaxZoom}
+                  onChange={(e) => set('theaterMaxZoom', e.target.value)}
+                />
+                <span className="settings-zoom-value" id="theaterMaxZoomValue">
+                  {form.theaterMaxZoom}×
+                </span>
+              </label>
+              <p className="settings-hint">
+                Stretch warps geometry but loses nothing; zoom keeps the shape
+                but crops top and bottom — and the bottom is where a video with
+                the path burned into the frame keeps it. Hence the 1.0 default:
+                stretch does the work, nothing is cut off.
+              </p>
             </section>
 
             <section className="settings-section">
