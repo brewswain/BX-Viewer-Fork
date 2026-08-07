@@ -8,6 +8,7 @@
  */
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/SiteHeader'
 import FilterBar, {
@@ -18,6 +19,11 @@ import FilterBar, {
 import PlaylistCard, { type PlaylistMeta } from '@/components/browse/PlaylistCard'
 import VideoCard, { type VideoMeta } from '@/components/browse/VideoCard'
 import ViewToggle, { type ViewMode } from '@/components/browse/ViewToggle'
+import { loadPlaylistPrefs, savePlaylistPrefs } from '@/lib/player/playback'
+import {
+  QUICK_PLAYLIST_ID,
+  saveQuickPlaylist,
+} from '@/lib/player/quickPlaylist'
 
 const VIDEO_BASE = '/videos'
 const PLAYLIST_BASE = '/playlists'
@@ -237,6 +243,49 @@ function Browse() {
     ? `${filtered.length} video${filtered.length !== 1 ? 's' : ''}`
     : '— videos'
 
+  const isFiltered =
+    searchQuery !== '' || FILTER_KEYS.some((k) => filters[k].size > 0)
+
+  const playAllDisabled = !videosLoaded || filtered.length === 0
+
+  /**
+   * Hand what is on screen — filters, search and grid order included — to the
+   * playlist page, without making the user build a real playlist in the
+   * manager. Runs on click, before the <Link> navigates.
+   *
+   * The navigation itself is a <Link> rather than router.push: every card in
+   * the grid probes its video for a duration, and those setState calls land
+   * unpredictably for seconds after load. A cold push has to await its RSC
+   * fetch, and the probes interrupt that transition often enough that the
+   * navigation silently never commits — clicking did nothing about half the
+   * time. Link prefetches the payload, so the transition commits immediately
+   * and has no window to be starved in.
+   *
+   * The shuffle variant writes the pref here rather than toggling it on
+   * arrival, so the very first track already comes from a shuffled order
+   * instead of being track 1 every time.
+   */
+  function prepareQuickPlaylist(shuffle: boolean) {
+    saveQuickPlaylist({
+      title: isFiltered ? 'Filtered videos' : 'All videos',
+      folders: filtered.map((v) => v._folder || v.videoId || '').filter(Boolean),
+    })
+    if (shuffle)
+      savePlaylistPrefs(QUICK_PLAYLIST_ID, {
+        ...loadPlaylistPrefs(QUICK_PLAYLIST_ID),
+        shuffle: true,
+      })
+  }
+
+  /** <a> has no `disabled`, so an empty grid has to refuse the click itself. */
+  function onPlayAllClick(e: React.MouseEvent, shuffle: boolean) {
+    if (playAllDisabled) {
+      e.preventDefault()
+      return
+    }
+    prepareQuickPlaylist(shuffle)
+  }
+
   const playlistCount =
     playlistsState === 'loading'
       ? '— playlists'
@@ -292,12 +341,57 @@ function Browse() {
             <span className="section-count" id="videoCount">
               {videoCount}
             </span>
-            <ViewToggle
-              mode={videoViewMode}
-              onChange={changeVideoView}
-              gridBtnId="btnGridViewVideos"
-              listBtnId="btnListViewVideos"
-            />
+            <div className="section-actions">
+              <div className="play-all">
+                <Link
+                  className="play-all-btn"
+                  id="btnPlayAll"
+                  href={`/playlist?p=${QUICK_PLAYLIST_ID}`}
+                  aria-disabled={playAllDisabled || undefined}
+                  title={
+                    isFiltered
+                      ? 'Play the filtered videos as a temporary playlist'
+                      : 'Play the whole library as a temporary playlist'
+                  }
+                  onClick={(e) => onPlayAllClick(e, false)}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                    <polygon points="6,4 20,12 6,20" />
+                  </svg>
+                  Play all
+                </Link>
+                <Link
+                  className="play-all-btn play-all-shuffle"
+                  id="btnShuffleAll"
+                  href={`/playlist?p=${QUICK_PLAYLIST_ID}`}
+                  aria-disabled={playAllDisabled || undefined}
+                  title="Shuffle the same videos"
+                  aria-label="Shuffle all"
+                  onClick={(e) => onPlayAllClick(e, true)}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    width="14"
+                    height="14"
+                  >
+                    <polyline points="16,3 21,3 21,8" />
+                    <line x1="4" y1="20" x2="21" y2="3" />
+                    <polyline points="21,16 21,21 16,21" />
+                    <line x1="15" y1="15" x2="21" y2="21" />
+                    <line x1="4" y1="4" x2="9" y2="9" />
+                  </svg>
+                </Link>
+              </div>
+              <ViewToggle
+                mode={videoViewMode}
+                onChange={changeVideoView}
+                gridBtnId="btnGridViewVideos"
+                listBtnId="btnListViewVideos"
+              />
+            </div>
           </div>
           {videosLoaded ? (
             <FilterBar videos={videos} filters={filters} onChange={setFilters} />

@@ -34,6 +34,11 @@ import {
   type LoopMode,
 } from '@/lib/player/playback'
 import {
+  loadQuickPlaylist,
+  QUICK_PLAYLIST_FALLBACK_TITLE,
+  QUICK_PLAYLIST_ID,
+} from '@/lib/player/quickPlaylist'
+import {
   cycleLoop,
   cycleTrackRepeat,
   getPlaybackState,
@@ -135,11 +140,56 @@ function PlaylistInner() {
     // render, which also runs on the server and would desync hydration.
     initPlayback(playlistId)
 
-    async function loadPlaylist(id: string) {
+    /**
+     * "Play all" has no meta.json on disk: the browse page hands the folder list
+     * over in sessionStorage. A fresh tab or cleared storage falls back to the
+     * whole library, so a `?p=__all__` link always plays something.
+     */
+    async function quickPlaylistMeta(): Promise<PlaylistMeta> {
+      const saved = loadQuickPlaylist()
+      if (saved) return { title: saved.title, videos: saved.folders }
+      return {
+        title: QUICK_PLAYLIST_FALLBACK_TITLE,
+        videos: await fetchJSON<string[]>(`${VIDEO_BASE}/manifest.json`),
+      }
+    }
+
+    /**
+     * A curated playlist naming a video that won't load is an error worth
+     * showing. The library-wide one is assembled from the manifest, where one
+     * folder missing its meta.json must not take the other two hundred down
+     * with it — so it gets the same synthesised default the browse page uses.
+     */
+    async function trackMeta(
+      folder: string,
+      bxFile: string | null,
+      tolerant: boolean,
+    ): Promise<TrackMeta> {
       try {
-        const playlist = await fetchJSON<PlaylistMeta>(
-          `${PLAYLIST_BASE}/${encodeURIComponent(id)}/meta.json`,
+        const m = await fetchJSON<VideoMeta>(
+          `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`,
         )
+        return { ...m, _folder: folder, _bxFile: bxFile }
+      } catch (e) {
+        if (!tolerant) throw e
+        return {
+          title: folder,
+          videoFile: `${folder}.mp4`,
+          bxFiles: [{ label: 'Default', file: `${folder}.bx` }],
+          _folder: folder,
+          _bxFile: bxFile,
+        }
+      }
+    }
+
+    async function loadPlaylist(id: string) {
+      const quick = id === QUICK_PLAYLIST_ID
+      try {
+        const playlist = quick
+          ? await quickPlaylistMeta()
+          : await fetchJSON<PlaylistMeta>(
+              `${PLAYLIST_BASE}/${encodeURIComponent(id)}/meta.json`,
+            )
         const videos = playlist.videos || []
 
         if (videos.length === 0) {
@@ -154,13 +204,7 @@ function PlaylistInner() {
             ) as string
             const bxOverride =
               typeof entry === 'string' ? null : entry.bxFile || null
-            return fetchJSON<VideoMeta>(
-              `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`,
-            ).then((m) => ({
-              ...m,
-              _folder: folder,
-              _bxFile: bxOverride,
-            }))
+            return trackMeta(folder, bxOverride, quick)
           }),
         )
 
@@ -424,7 +468,11 @@ function PlaylistInner() {
       <>
         <SiteHeader />
         <div id="playerLayout" className="player-layout">
-          <div className="error-msg">This playlist has no videos.</div>
+          <div className="error-msg">
+            {playlistId === QUICK_PLAYLIST_ID
+              ? 'There are no videos to play.'
+              : 'This playlist has no videos.'}
+          </div>
         </div>
       </>
     )

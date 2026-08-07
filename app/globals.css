@@ -177,6 +177,70 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Right-hand cluster of the section header. It owns the `margin-left: auto`
+   that .view-toggle carries on its own elsewhere — inside here there is no free
+   space for that one to absorb, so it turns into a no-op. */
+.section-actions {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.play-all {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+}
+
+.play-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  /* An <a>, not a <button> — see the Link note in app/page.tsx. */
+  text-decoration: none;
+  color: var(--text2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.play-all-btn:hover:not([aria-disabled]) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* The click is refused in JS too; this only has to make it look inert. */
+.play-all-btn[aria-disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The pair reads as one control, so only the outer edges are rounded. */
+.play-all .play-all-btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.play-all-shuffle {
+  padding: 0.4rem 0.6rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: none;
+}
+
 .section-count {
   font-family: var(--mono);
   font-size: 0.72rem;
