@@ -31,6 +31,7 @@ import {
   getEffectiveColorRgb,
   hexToRgbArr,
 } from './format'
+import { fitTransform, theaterFit } from './theaterFit'
 import type { BxEffect } from './types'
 
 export type PlayerEngineOptions = {
@@ -283,6 +284,30 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     // Resizing clears the canvas, so it always needs a repaint. Catches the
     // ResizeObserver, fullscreen/theater transitions and the public API at once.
     scheduleFrame()
+  }
+
+  /**
+   * Push the picture out into the pillarbox bars theater's stage leaves it.
+   * Transform only — the layout box, the strip and the canvas are untouched, so
+   * this can run as often as it likes. Outside theater the style is cleared and
+   * `object-fit: contain` is back in sole charge.
+   *
+   * `clientWidth/Height` rather than `getBoundingClientRect`, which would report
+   * the box we just scaled and wind the stretch up on every call.
+   */
+  function applyTheaterFit() {
+    if (!isTheater) {
+      video.style.transform = ''
+      return
+    }
+    video.style.transform = fitTransform(
+      theaterFit(
+        video.clientWidth,
+        video.clientHeight,
+        video.videoWidth,
+        video.videoHeight,
+      ),
+    )
   }
 
   // ── Canvas rendering ────────────────────────────────────────────────────────
@@ -859,8 +884,14 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   // The theater strip is sized from the video's own aspect ratio, so it has to
   // be recomputed as soon as the intrinsic dimensions are known — and again on
   // `resize`, which fires when a playlist swaps in a differently shaped track.
+  // The fit is recomputed alongside it: a new aspect ratio changes how much
+  // pillarbox there is to close without changing the layout box at all, so the
+  // ResizeObserver would never hear about it.
   for (const evt of ['loadedmetadata', 'resize']) {
-    on(video, evt, () => resizeCanvas())
+    on(video, evt, () => {
+      resizeCanvas()
+      applyTheaterFit()
+    })
   }
 
   if (onCanPlay) on(video, 'canplay', onCanPlay)
@@ -1053,6 +1084,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         resizeCanvas()
+        applyTheaterFit()
         showControls()
       }),
     )
@@ -1065,6 +1097,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     document.body.classList.remove('theater-mode', 'pointer-active')
     if (btnTheater) btnTheater.classList.remove('active')
     hideControls()
+    applyTheaterFit() // `isTheater` is already false: clears the stretch
     requestAnimationFrame(() => requestAnimationFrame(() => resizeCanvas()))
   }
 
@@ -1142,8 +1175,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   )
 
   // ── ResizeObserver + start loop ─────────────────────────────────────────────
-  const resizeObserver = new ResizeObserver(() => resizeCanvas())
+  // The strip drives the canvas; the video's own box drives the theater fit.
+  // Watching the video is what catches the second-order changes — the strip
+  // growing takes height off the picture, and the drawer opening takes width —
+  // without either having to know about the other.
+  const resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      entry.target === video ? applyTheaterFit() : resizeCanvas()
+    }
+  })
   resizeObserver.observe(bxWrap)
+  resizeObserver.observe(video)
   resizeCanvas()
   scheduleFrame()
 
@@ -1184,7 +1226,12 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       lastRafTime = null
       scheduleFrame()
     },
-    resizeCanvas,
+    // Callers reach for this after swapping a track in; the picture has to be
+    // refitted to the new one, not just the canvas.
+    resizeCanvas() {
+      resizeCanvas()
+      applyTheaterFit()
+    },
     setOffset(secs) {
       offsetSecs = typeof secs === 'number' && secs > 0 ? secs : 0
       scheduleFrame()
@@ -1203,6 +1250,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
         'pointer-active',
         'theater-sidebar-open',
       )
+      video.style.transform = '' // the element outlives the engine on re-init
     },
   }
 }

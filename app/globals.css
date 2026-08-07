@@ -2522,13 +2522,23 @@ body.theater-mode .player-video-wrap {
   overflow: hidden;
 }
 
-/* Video takes all remaining space inside player-video-wrap */
+/* Video takes all remaining space inside player-video-wrap.
+
+   `contain` still does the fitting; the engine then scales the element to push
+   the picture out into the pillarbox bars theater's strip leaves it with (see
+   lib/player/theaterFit.ts). The scaled element overhangs the wrap, which is
+   why the wrap clips — the overhang is transparent, but it would otherwise sit
+   over the strip and the controls. */
 body.theater-mode .player-video-wrap video {
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
   height: auto;
   object-fit: contain;
+  transform-origin: center center;
+  /* Only ever set to a `scale()`, so this animates the fit changing — a track
+     of a different shape, or the drawer sliding in — rather than snapping. */
+  transition: transform 0.25s ease;
 }
 
 /* bxWrap sits at the bottom of player-video-wrap, always visible */
