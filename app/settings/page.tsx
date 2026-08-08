@@ -33,6 +33,7 @@ type FormState = {
   bottomLineActive: string
   defaultOverlay: boolean
   defaultOverlayBg: boolean
+  overlayBgOpacity: string
   defaultFlipY: boolean
   defaultTheater: boolean
   /** Kept as strings — these mirror the raw <input> values, as the DOM did. */
@@ -81,6 +82,7 @@ function toForm(s: Settings): FormState {
     bottomLineActive: s.bottomLineActive,
     defaultOverlay: s.defaultOverlay,
     defaultOverlayBg: s.defaultOverlayBg,
+    overlayBgOpacity: String(clamp01(s.overlayBgOpacity)),
     defaultFlipY: s.defaultFlipY,
     defaultTheater: s.defaultTheater !== false,
     defaultZoom: String(s.defaultZoom),
@@ -152,6 +154,7 @@ export default function SettingsPage() {
       bottomLineActive: form.bottomLineActive,
       defaultOverlay: form.defaultOverlay,
       defaultOverlayBg: form.defaultOverlayBg,
+      overlayBgOpacity: clamp01(parseFloat(form.overlayBgOpacity)),
       defaultFlipY: form.defaultFlipY,
       defaultTheater: form.defaultTheater,
       defaultZoom: parseFloat(form.defaultZoom),
@@ -369,6 +372,23 @@ export default function SettingsPage() {
                   <span>Flip Y on</span>
                 </label>
               </div>
+              <label className="settings-row settings-row-slider">
+                <span className="settings-label">Overlay bg opacity</span>
+                <input
+                  type="range"
+                  id="overlayBgOpacity"
+                  name="overlayBgOpacity"
+                  className="settings-zoom-slider"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={form.overlayBgOpacity}
+                  onChange={(e) => set('overlayBgOpacity', e.target.value)}
+                />
+                <span className="settings-zoom-value" id="overlayBgOpacityValue">
+                  {Math.round(parseFloat(form.overlayBgOpacity) * 100)}%
+                </span>
+              </label>
               <label className="settings-row settings-row-slider">
                 <span className="settings-label">Default zoom</span>
                 <input

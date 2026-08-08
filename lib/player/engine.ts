@@ -19,6 +19,7 @@ import {
   BX_HEIGHT_OVERLAY,
   BX_THEATER_MAX_VH,
   BX_THEATER_MIN_VH,
+  DEFAULT_OVERLAY_BG_OPACITY,
   EDGE_PAD,
   FPS,
   PX_PER_FRAME,
@@ -110,6 +111,13 @@ function byId<T extends HTMLElement>(id: string): T {
  * `contentEditable` is checked alongside the tags because a rich-text field is
  * an ordinary <div> as far as `tagName` is concerned.
  */
+/** An alpha coerced into 0–1, falling back to the shipped scrim. */
+function clampOpacity(n: unknown): number {
+  if (typeof n !== 'number' || !Number.isFinite(n))
+    return DEFAULT_OVERLAY_BG_OPACITY
+  return Math.min(1, Math.max(0, n))
+}
+
 function isTypingTarget(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null
   if (!el) return false
@@ -144,6 +152,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   // DOM refs — all must exist in the page by the time this runs
   const overlayBtn = byId<HTMLButtonElement>('overlayBtn')
   const overlayBgBtn = byId<HTMLButtonElement>('overlayBgBtn')
+  const overlayBgOpacityWrap = byId<HTMLElement>('overlayBgOpacityWrap')
+  const overlayBgOpacitySlider = byId<HTMLInputElement>('overlayBgOpacitySlider')
+  const overlayBgOpacityValue = byId<HTMLElement>('overlayBgOpacityValue')
   const progressFill = byId<HTMLElement>('progressFill')
   const progressThumb = byId<HTMLElement>('progressThumb')
   const timeDisplay = byId<HTMLElement>('timeDisplay')
@@ -151,6 +162,12 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const playIcon = byId<HTMLElement>('playIcon')
   const btnRewind = byId<HTMLButtonElement>('btnRewind')
   const btnForward = byId<HTMLButtonElement>('btnForward')
+  // Track stepping belongs to the page, not the engine — these are React
+  // buttons with their own onClick, and both are null on a single video. The
+  // keyboard drives them by clicking rather than by reimplementing what
+  // advancing a track means.
+  const btnPrevTrack = byId<HTMLButtonElement>('btnPrevTrack')
+  const btnNextTrack = byId<HTMLButtonElement>('btnNextTrack')
   const btnMute = byId<HTMLButtonElement>('btnMute')
   const volIcon = byId<HTMLElement>('volIcon')
   const volumeSlider = byId<HTMLInputElement>('volumeSlider')
@@ -187,6 +204,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let lastRafTime: number | null = null
   let isOverlay = userSettings.defaultOverlay === true
   let overlayBg = userSettings.defaultOverlayBg === true
+  // Live for the session, seeded from the persisted default and never written
+  // back — how dark the scrim needs to be is a property of the video under it.
+  let overlayBgOpacity = clampOpacity(userSettings.overlayBgOpacity)
   let flipY = userSettings.defaultFlipY === true
   // Purely a display switch — for videos that already have the path burned in.
   // The .bx stays loaded and `onFrame` keeps reporting, so device output and
@@ -244,9 +264,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   overlayBtn.textContent = `overlay: ${isOverlay ? 'on' : 'off'}`
   overlayBtn.classList.toggle('active', isOverlay)
   bxWrap.classList.toggle('overlay-mode', isOverlay)
-  overlayBgBtn.style.display = isOverlay ? '' : 'none'
-  overlayBgBtn.textContent = `bg: ${overlayBg ? 'on' : 'off'}`
-  overlayBgBtn.classList.toggle('active', overlayBg)
+  syncOverlayBgControls()
   if (flipYBtn) {
     flipYBtn.textContent = `flip Y: ${flipY ? 'on' : 'off'}`
     flipYBtn.classList.toggle('active', flipY)
@@ -501,10 +519,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
         bgRgb || hexToRgbArr(userSettings.bgColor || '#0a0b0f')
       ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},${bgAlpha})`
       ctx.fillRect(0, 0, W, H)
-    } else if (overlayBg) {
+    } else if (overlayBg && overlayBgOpacity > 0) {
       const [bgR, bgG, bgB] =
         bgRgb || hexToRgbArr(userSettings.bgColor || '#0a0b0f')
-      ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},0.45)`
+      ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},${overlayBgOpacity})`
       ctx.fillRect(0, topY, W, H - topY)
     }
 
@@ -772,6 +790,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     bxWrap.classList.toggle('path-hidden', pathHidden)
     overlayBtn.disabled = pathHidden
     overlayBgBtn.disabled = pathHidden
+    if (overlayBgOpacitySlider) overlayBgOpacitySlider.disabled = pathHidden
     if (flipYBtn) flipYBtn.disabled = pathHidden
   }
 
@@ -786,22 +805,46 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     })
   }
 
+  /**
+   * The bg button only means anything in overlay mode, and its opacity slider
+   * only means anything once the bg is on — so both follow the state above
+   * them rather than sitting there inert.
+   */
+  function syncOverlayBgControls() {
+    overlayBgBtn.style.display = isOverlay ? '' : 'none'
+    overlayBgBtn.textContent = `bg: ${overlayBg ? 'on' : 'off'}`
+    overlayBgBtn.classList.toggle('active', overlayBg)
+    if (overlayBgOpacityWrap)
+      overlayBgOpacityWrap.style.display = isOverlay && overlayBg ? '' : 'none'
+    if (overlayBgOpacitySlider)
+      overlayBgOpacitySlider.value = String(overlayBgOpacity)
+    if (overlayBgOpacityValue)
+      overlayBgOpacityValue.textContent = `${Math.round(overlayBgOpacity * 100)}%`
+  }
+
   on(overlayBtn, 'click', () => {
     isOverlay = !isOverlay
     overlayBtn.textContent = `overlay: ${isOverlay ? 'on' : 'off'}`
     overlayBtn.classList.toggle('active', isOverlay)
     bxWrap.classList.toggle('overlay-mode', isOverlay)
-    overlayBgBtn.style.display = isOverlay ? '' : 'none'
+    syncOverlayBgControls()
     resizeCanvas()
     if (isFullscreen()) anchorOverlay()
   })
 
   on(overlayBgBtn, 'click', () => {
     overlayBg = !overlayBg
-    overlayBgBtn.textContent = `bg: ${overlayBg ? 'on' : 'off'}`
-    overlayBgBtn.classList.toggle('active', overlayBg)
+    syncOverlayBgControls()
     scheduleFrame()
   })
+
+  if (overlayBgOpacitySlider) {
+    on(overlayBgOpacitySlider, 'input', () => {
+      overlayBgOpacity = clampOpacity(parseFloat(overlayBgOpacitySlider.value))
+      syncOverlayBgControls()
+      scheduleFrame()
+    })
+  }
 
   if (flipYBtn) {
     on(flipYBtn, 'click', () => {
@@ -869,8 +912,21 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     video.currentTime = Math.min(video.duration || 0, video.currentTime + 5)
   })
 
+  /**
+   * Transport, volume and track keys. Every one of these has a button too —
+   * these exist because the player is used full-screen, where the buttons are
+   * hidden behind a pointer move to the bottom edge.
+   *
+   * `e.code` for the physical keys (Space, arrows) and `e.key` for the letters,
+   * so the letters follow the user's layout instead of a US keyboard's.
+   *
+   * Shift is load-bearing rather than ignored: it is what separates the track
+   * keys from the plain letters next to them, so an unshifted binding has to
+   * say so or Shift+P would toggle the drawer on its way to the previous track.
+   */
   on(document, 'keydown', (e: KeyboardEvent) => {
     if (isTypingTarget(e)) return
+    const key = e.key.toLowerCase()
     if (e.code === 'Space') {
       e.preventDefault()
       togglePlay()
@@ -879,6 +935,20 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       video.currentTime = Math.max(0, video.currentTime - 5)
     if (e.code === 'ArrowRight')
       video.currentTime = Math.min(video.duration || 0, video.currentTime + 5)
+    // The arrows would scroll the page out from under the player otherwise.
+    if (e.code === 'ArrowUp') {
+      e.preventDefault()
+      setVolume(video.volume + 0.05)
+    }
+    if (e.code === 'ArrowDown') {
+      e.preventDefault()
+      setVolume(video.volume - 0.05)
+    }
+    if (key === 'm' && !e.shiftKey) toggleMute()
+    // Shift+F is the fit popover, and it is theater's to handle.
+    if (key === 'f' && !e.shiftKey) toggleFullscreen()
+    if (key === 'n' && e.shiftKey && btnNextTrack) btnNextTrack.click()
+    if (key === 'p' && e.shiftKey && btnPrevTrack) btnPrevTrack.click()
   })
 
   // ── Video state events ──────────────────────────────────────────────────────
@@ -944,21 +1014,37 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   // ── Volume ──────────────────────────────────────────────────────────────────
-  on(volumeSlider, 'input', () => {
-    video.volume = parseFloat(volumeSlider.value)
-    video.muted = video.volume === 0
-    sessionStorage.setItem('playerVolume', volumeSlider.value)
-    sessionStorage.setItem('playerMuted', String(video.muted))
-    updateVolIcon()
-  })
+  // Slider, button and keyboard all land here rather than each doing their own
+  // bookkeeping — the state is spread over four places (element volume, element
+  // muted, the slider position and two sessionStorage keys) and drifted before.
 
-  on(btnMute, 'click', () => {
+  function persistVolume() {
+    // `video.volume` rather than the slider: muting parks the slider at 0 but
+    // has to remember the level to come back to.
+    sessionStorage.setItem('playerVolume', String(video.volume))
+    sessionStorage.setItem('playerMuted', String(video.muted))
+  }
+
+  function setVolume(v: number) {
+    const next = Math.max(0, Math.min(1, v))
+    video.volume = next
+    // Raising the volume unmutes: leaving `muted` on would answer the keypress
+    // with continued silence.
+    video.muted = next === 0
+    volumeSlider.value = String(next)
+    persistVolume()
+    updateVolIcon()
+  }
+
+  function toggleMute() {
     video.muted = !video.muted
     volumeSlider.value = String(video.muted ? 0 : video.volume)
-    sessionStorage.setItem('playerMuted', String(video.muted))
-    sessionStorage.setItem('playerVolume', String(video.volume))
+    persistVolume()
     updateVolIcon()
-  })
+  }
+
+  on(volumeSlider, 'input', () => setVolume(parseFloat(volumeSlider.value)))
+  on(btnMute, 'click', toggleMute)
 
   function updateVolIcon() {
     if (video.muted || video.volume === 0) {
@@ -1096,7 +1182,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     resizeCanvas()
   }
 
-  on(btnFullscreen, 'click', () => {
+  function toggleFullscreen() {
     const container = byId<FsElement>('playerContainer')
     if (!isFullscreen()) {
       const req = container.requestFullscreen || container.webkitRequestFullscreen
@@ -1106,7 +1192,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       const exit = d.exitFullscreen || d.webkitExitFullscreen
       if (exit) exit.call(document)
     }
-  })
+  }
+
+  on(btnFullscreen, 'click', toggleFullscreen)
 
   on(document, 'fullscreenchange', () => {
     document.fullscreenElement ? onEnterFullscreen() : onExitFullscreen()
@@ -1260,13 +1348,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   on(document, 'keydown', (e: KeyboardEvent) => {
     if (isTypingTarget(e)) return
-    if (e.key === 't' || e.key === 'T') {
+    const key = e.key.toLowerCase()
+    if (key === 't' && !e.shiftKey) {
       isTheater ? exitTheater() : enterTheater()
     }
-    if ((e.key === 'p' || e.key === 'P') && isTheater && btnPlaylistDrawer) {
+    // Unshifted only: Shift+P is the previous track.
+    if (key === 'p' && !e.shiftKey && isTheater && btnPlaylistDrawer) {
       setPlaylistDrawer(!isDrawerOpen())
     }
-    if ((e.key === 'f' || e.key === 'F') && isTheater && btnTheaterFit) {
+    // Shifted, because plain F is fullscreen — the far more common request, and
+    // the key every other player in the world already uses for it.
+    if (key === 'f' && e.shiftKey && isTheater && btnTheaterFit) {
       setFitPopover(!isFitPopoverOpen())
     }
     if (e.key === 'Escape' && isTheater) {

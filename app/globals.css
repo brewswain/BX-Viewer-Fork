@@ -2658,6 +2658,17 @@ body.theater-mode .ctrl-btn.theater-only {
   display: inline-flex;
 }
 
+/* Fixed width so dragging the slider does not shuffle the row left and right
+   as the readout goes 5% → 100%. */
+.overlay-bg-opacity-value {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text3);
+  width: 2.5rem;
+  text-align: right;
+  flex-shrink: 0;
+}
+
 /* Theater fit — the popover is anchored to the theater/fit button pair, so the
    wrapper is what carries the positioning context. */
 .theater-fit-wrap {

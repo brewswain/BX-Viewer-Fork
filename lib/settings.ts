@@ -4,6 +4,7 @@
  * preferences.
  */
 
+import { DEFAULT_OVERLAY_BG_OPACITY } from './player/constants'
 import { MAX_STRETCH, MAX_ZOOM } from './player/theaterFit'
 
 export const BX_SETTINGS_KEY = 'bx_viewer_settings'
@@ -19,6 +20,11 @@ export type Settings = {
   bottomLineActive: string
   defaultOverlay: boolean
   defaultOverlayBg: boolean
+  /**
+   * Alpha of the overlay-mode scrim, 0–1. The secondary control row overrides
+   * it live per video; this is only where each video starts.
+   */
+  overlayBgOpacity: number
   defaultFlipY: boolean
   /** Opt-out: videos open in theater mode unless this is explicitly false. */
   defaultTheater: boolean
@@ -74,6 +80,7 @@ export const DEFAULTS: Settings = {
   bottomLineActive: '#f07849',
   defaultOverlay: false,
   defaultOverlayBg: false,
+  overlayBgOpacity: DEFAULT_OVERLAY_BG_OPACITY,
   defaultFlipY: false,
   defaultTheater: true,
   defaultZoom: 0.25,

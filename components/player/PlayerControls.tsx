@@ -2,6 +2,7 @@
 
 import { memo, type ReactNode } from 'react'
 
+import { DEFAULT_OVERLAY_BG_OPACITY } from '@/lib/player/constants'
 import type { LoopMode, PlaylistLoopMode } from '@/lib/player/playback'
 import { STRETCH_RANGE, ZOOM_RANGE } from '@/lib/player/theaterFit'
 
@@ -14,6 +15,15 @@ import { STRETCH_RANGE, ZOOM_RANGE } from '@/lib/player/theaterFit'
  * assigning `innerHTML`, and raw-HTML children keep React out of that subtree
  * instead of leaving it holding stale child fibers.
  */
+
+/** Shared by the three inline slider captions in the secondary row. */
+const SLIDER_LABEL_STYLE = {
+  fontFamily: 'var(--mono)',
+  fontSize: '0.68rem',
+  color: 'var(--text3)',
+  letterSpacing: '0.04em',
+  whiteSpace: 'nowrap',
+} as const
 
 const PLAY_ICON_HTML = '<polygon points="5,3 19,12 5,21"/>'
 const VOL_ICON_HTML =
@@ -93,7 +103,7 @@ function PlayerControls({
           <button
             className="ctrl-btn"
             id="btnPrevTrack"
-            title="Previous video"
+            title="Previous video (Shift+P)"
             onClick={onPrevTrack}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -102,13 +112,13 @@ function PlayerControls({
             </svg>
           </button>
         )}
-        <button className="ctrl-btn" id="btnRewind" title="Rewind 5s">
+        <button className="ctrl-btn" id="btnRewind" title="Rewind 5s (←)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="11,17 6,12 11,7" />
             <polyline points="18,17 13,12 18,7" />
           </svg>
         </button>
-        <button className="ctrl-btn play-btn" id="btnPlay" title="Play / Pause">
+        <button className="ctrl-btn play-btn" id="btnPlay" title="Play / pause (Space)">
           <svg
             viewBox="0 0 24 24"
             fill="currentColor"
@@ -116,7 +126,7 @@ function PlayerControls({
             dangerouslySetInnerHTML={{ __html: PLAY_ICON_HTML }}
           />
         </button>
-        <button className="ctrl-btn" id="btnForward" title="Forward 5s">
+        <button className="ctrl-btn" id="btnForward" title="Forward 5s (→)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="13,17 18,12 13,7" />
             <polyline points="6,17 11,12 6,7" />
@@ -126,7 +136,7 @@ function PlayerControls({
           <button
             className="ctrl-btn"
             id="btnNextTrack"
-            title="Next video"
+            title="Next video (Shift+N)"
             onClick={onNextTrack}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -230,7 +240,7 @@ function PlayerControls({
           <button
             className="ctrl-btn theater-only theater-fit-btn"
             id="btnTheaterFit"
-            title="Fit the picture to the stage (F)"
+            title="Fit the picture to the stage (Shift+F)"
             aria-label="Theater fit"
             aria-expanded="false"
             aria-controls="theaterFitPopover"
@@ -289,7 +299,7 @@ function PlayerControls({
             </div>
           </div>
         </div>
-        <button className="ctrl-btn" id="btnFullscreen" title="Fullscreen">
+        <button className="ctrl-btn" id="btnFullscreen" title="Fullscreen (F)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="15,3 21,3 21,9" />
             <polyline points="9,21 3,21 3,15" />
@@ -336,18 +346,30 @@ function PlayerControls({
 
         <div className="controls-spacer"></div>
 
-        <div className="volume-wrap zoom-wrap">
-          <span
-            style={{
-              fontFamily: 'var(--mono)',
-              fontSize: '0.68rem',
-              color: 'var(--text3)',
-              letterSpacing: '0.04em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            zoom
+        {/* Only useful while the background is actually being drawn, so the
+            engine shows it alongside the bg button's "on" state. */}
+        <div
+          className="volume-wrap zoom-wrap"
+          id="overlayBgOpacityWrap"
+          style={{ display: 'none' }}
+        >
+          <span style={SLIDER_LABEL_STYLE}>bg</span>
+          <input
+            type="range"
+            className="zoom-slider"
+            id="overlayBgOpacitySlider"
+            min="0"
+            max="1"
+            step="0.05"
+            defaultValue={String(DEFAULT_OVERLAY_BG_OPACITY)}
+          />
+          <span className="overlay-bg-opacity-value" id="overlayBgOpacityValue">
+            45%
           </span>
+        </div>
+
+        <div className="volume-wrap zoom-wrap">
+          <span style={SLIDER_LABEL_STYLE}>zoom</span>
           <input
             type="range"
             className="zoom-slider"
@@ -360,17 +382,7 @@ function PlayerControls({
         </div>
 
         <div className="volume-wrap zoom-wrap">
-          <span
-            style={{
-              fontFamily: 'var(--mono)',
-              fontSize: '0.68rem',
-              color: 'var(--text3)',
-              letterSpacing: '0.04em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            speed
-          </span>
+          <span style={SLIDER_LABEL_STYLE}>speed</span>
           <input
             type="range"
             className="zoom-slider"
@@ -383,7 +395,7 @@ function PlayerControls({
         </div>
 
         <div className="volume-wrap">
-          <button className="ctrl-btn" id="btnMute" title="Mute">
+          <button className="ctrl-btn" id="btnMute" title="Mute (M) — volume is ↑ / ↓">
             <svg
               viewBox="0 0 24 24"
               fill="none"
