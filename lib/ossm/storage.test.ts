@@ -494,7 +494,7 @@ describe('installFiles', () => {
 
     const result = await installFiles(t, planned, {
       name: 'My List',
-      lines: planned.map((p) => p.name),
+      entries: planned.map((p) => ({ path: p.name })),
     })
 
     expect(result.dir).toBe(ossm)
@@ -536,14 +536,14 @@ describe('installFiles', () => {
     await fs.writeFile(path.join(ossm, 'Playlists', 'My List.bxpl'), 'theirs.bx\n')
 
     const t = target(ossm, 'win32')
-    let result = await installFiles(t, [], { name: 'My List', lines: ['a.bx'] })
+    let result = await installFiles(t, [], { name: 'My List', entries: [{ path: 'a.bx' }] })
     expect(result.playlist).toBe('My List (2).bxpl')
     expect(result.warnings.join(' ')).toMatch(/already in Playlists/)
     expect(await fs.readFile(path.join(ossm, 'Playlists', 'My List.bxpl'), 'utf8')).toBe(
       'theirs.bx\n',
     )
 
-    result = await installFiles(t, [], { name: 'My List', lines: ['b.bx'] })
+    result = await installFiles(t, [], { name: 'My List', entries: [{ path: 'b.bx' }] })
     expect(result.playlist).toBe('My List (3).bxpl')
   })
 
@@ -551,7 +551,7 @@ describe('installFiles', () => {
     const root = await tmp()
     const ossm = path.join(root, 'OSSM Sauce')
     const t = target(ossm, 'win32')
-    const playlist = { name: 'My List', lines: ['a.bx', 'b.bx'] }
+    const playlist = { name: 'My List', entries: [{ path: 'a.bx' }, { path: 'b.bx' }] }
 
     const first = await installFiles(t, [], playlist)
     const second = await installFiles(t, [], playlist)
@@ -567,7 +567,7 @@ describe('installFiles', () => {
     const ossm = path.join(root, 'OSSM Sauce')
     const result = await installFiles(target(ossm, 'win32'), [], {
       name: 'My List.bxpl',
-      lines: ['a.bx'],
+      entries: [{ path: 'a.bx' }],
     })
     expect(result.playlist).toBe('My List.bxpl')
     expect(await fs.readdir(path.join(ossm, 'Playlists'))).toEqual(['My List.bxpl'])

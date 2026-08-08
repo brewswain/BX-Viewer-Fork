@@ -26,8 +26,10 @@
 
 import { bxplBody } from './naming'
 import type {
+  OssmEntry,
   OssmPayload,
   OssmPayloadFile,
+  OssmPlaylist,
   OssmPlaylistResult,
   OssmSendFile,
   OssmSendResult,
@@ -184,38 +186,42 @@ export async function checkOssmApp(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Point the `.bxpl` lines at the names the app is actually holding.
+ * Point the `.bxpl` entries at the names the app is actually holding.
  *
  * The app never overwrites: identical bytes reuse the file already stored, and a
  * name held by different bytes is taken as `foo (2).bx` (`path_import.gd`). So
  * the name we asked for is not necessarily the name it has, and a playlist built
- * from what we *sent* can point at a different video's path. A line whose file
+ * from what we *sent* can point at a different video's path. An entry whose file
  * never stored is dropped rather than left in — the app would only count it as
  * `missing`, and a dead entry in the queue is worse than a shorter playlist.
+ *
+ * Only `path` is rewritten. Everything else on an entry describes how to *play*
+ * it, not which file it is, and survives the substitution untouched — a renamed
+ * file keeps its repeat setting and its video offset.
  *
  * Pure, and the only part of this module worth testing.
  */
 export function applyStoredNames(
-  lines: string[],
+  entries: readonly OssmEntry[],
   files: readonly OssmSendFile[],
-): { lines: string[]; dropped: string[] } {
+): { entries: OssmEntry[]; dropped: string[] } {
   const stored = new Map<string, string | null>()
   for (const f of files) stored.set(f.requested, f.stored)
 
-  const out: string[] = []
+  const out: OssmEntry[] = []
   const dropped: string[] = []
-  for (const line of lines) {
-    if (!stored.has(line)) {
+  for (const entry of entries) {
+    if (!stored.has(entry.path)) {
       // No outcome for this name at all: it did not come from this send, so
-      // leave it alone rather than silently deleting a line we don't own.
-      out.push(line)
+      // leave it alone rather than silently deleting an entry we don't own.
+      out.push(entry)
       continue
     }
-    const name = stored.get(line)
-    if (name) out.push(name)
-    else dropped.push(line)
+    const name = stored.get(entry.path)
+    if (name) out.push({ ...entry, path: name })
+    else dropped.push(entry.path)
   }
-  return { lines: out, dropped }
+  return { entries: out, dropped }
 }
 
 /** The JSON `/load_path` request for one file, so its size can be checked first. */
@@ -235,11 +241,11 @@ function loadPathBody(file: OssmPayloadFile) {
  */
 export async function sendOssmPlaylist(
   rawUrl: string,
-  lines: string[],
+  playlist: OssmPlaylist,
   replace: boolean,
 ): Promise<OssmPlaylistResult> {
   const url = resolveOssmAppUrl(rawUrl)
-  const body: Record<string, unknown> = { text: bxplBody(lines) }
+  const body: Record<string, unknown> = { text: bxplBody(playlist) }
   if (replace) body.replace = true
 
   const res = await post(url, '/load_playlist', body, FILE_TIMEOUT_MS)
@@ -253,7 +259,7 @@ export async function sendOssmPlaylist(
   }
   return {
     outcome: 'sent',
-    entries: typeof res.data.entries === 'number' ? res.data.entries : lines.length,
+    entries: typeof res.data.entries === 'number' ? res.data.entries : playlist.entries.length,
     missing: typeof res.data.missing === 'number' ? res.data.missing : 0,
     error: null,
   }
@@ -318,8 +324,7 @@ export async function sendOssmPayload(
     }
   }
 
-  const requestedLines = payload.playlist?.lines ?? []
-  const { lines, dropped } = applyStoredNames(requestedLines, files)
+  const { entries, dropped } = applyStoredNames(payload.playlist?.entries ?? [], files)
   if (dropped.length) {
     warnings.push(
       `Left out of the playlist because ${dropped.length === 1 ? 'it' : 'they'} did not store: ${dropped.join(', ')}`,
@@ -327,9 +332,15 @@ export async function sendOssmPayload(
   }
   if (fatal) warnings.push(fatal)
 
+  // The flags come through untouched: nothing the app said about the *files*
+  // bears on what the user asked for shuffle and loop.
+  const sentPlaylist: OssmPlaylist | null = payload.playlist
+    ? { ...payload.playlist, entries }
+    : null
+
   let playlist: OssmPlaylistResult = { outcome: 'none', entries: 0, missing: 0, error: null }
-  if (payload.playlist) {
-    if (fatal || lines.length === 0) {
+  if (sentPlaylist) {
+    if (fatal || entries.length === 0) {
       playlist = {
         outcome: 'skipped',
         entries: 0,
@@ -337,11 +348,11 @@ export async function sendOssmPayload(
         error: 'No path reached the app, so the playlist was not sent.',
       }
     } else {
-      playlist = await sendOssmPlaylist(url, lines, options.replace === true)
+      playlist = await sendOssmPlaylist(url, sentPlaylist, options.replace === true)
     }
   }
 
-  return { url, files, playlistLines: lines, droppedLines: dropped, playlist, warnings }
+  return { url, files, sentPlaylist, droppedPaths: dropped, playlist, warnings }
 }
 
 /** The app's status codes, said in terms of what the user can do about them. */

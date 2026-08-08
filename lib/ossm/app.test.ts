@@ -15,7 +15,7 @@ import {
   resolveOssmAppUrl,
   summarizeSend,
 } from './app'
-import type { OssmSendFile, OssmSendResult } from './types'
+import type { OssmEntry, OssmSendFile, OssmSendResult } from './types'
 
 const sent = (requested: string, stored: string | null, reused = false): OssmSendFile => ({
   requested,
@@ -23,6 +23,10 @@ const sent = (requested: string, stored: string | null, reused = false): OssmSen
   reused,
   error: stored ? null : 'nope',
 })
+
+/** Entries in, paths out — the substitution is all these tests care about. */
+const paths = (entries: OssmEntry[]): string[] => entries.map((e) => e.path)
+const asEntries = (names: string[]): OssmEntry[] => names.map((path) => ({ path }))
 
 describe('normalizeOssmAppUrl', () => {
   test('a bare host gets the app port, not port 80', () => {
@@ -58,35 +62,57 @@ describe('resolveOssmAppUrl', () => {
 })
 
 describe('applyStoredNames', () => {
-  test('lines follow the name the app answered with', () => {
+  test('entries follow the name the app answered with', () => {
     const files = [sent('hope.bx', 'hope.bx'), sent('hopeless-hard.bx', 'hopeless-hard (2).bx')]
-    const { lines, dropped } = applyStoredNames(['hopeless-hard.bx', 'hope.bx'], files)
-    expect(lines).toEqual(['hopeless-hard (2).bx', 'hope.bx'])
+    const { entries, dropped } = applyStoredNames(asEntries(['hopeless-hard.bx', 'hope.bx']), files)
+    expect(paths(entries)).toEqual(['hopeless-hard (2).bx', 'hope.bx'])
     expect(dropped).toEqual([])
   })
 
-  test('a repeated line is substituted every time', () => {
+  test('a repeated entry is substituted every time', () => {
     const files = [sent('hope.bx', 'hope (3).bx')]
-    const { lines } = applyStoredNames(['hope.bx', 'hope.bx'], files)
-    expect(lines).toEqual(['hope (3).bx', 'hope (3).bx'])
+    const { entries } = applyStoredNames(asEntries(['hope.bx', 'hope.bx']), files)
+    expect(paths(entries)).toEqual(['hope (3).bx', 'hope (3).bx'])
   })
 
   test('a reused file keeps the name already on disk', () => {
     const files = [sent('hope.bx', 'hope.bx', true)]
-    expect(applyStoredNames(['hope.bx'], files).lines).toEqual(['hope.bx'])
+    expect(paths(applyStoredNames(asEntries(['hope.bx']), files).entries)).toEqual(['hope.bx'])
   })
 
   test('a file that never stored is dropped, not left dangling', () => {
     const files = [sent('hope.bx', 'hope.bx'), sent('broken.bx', null)]
-    const { lines, dropped } = applyStoredNames(['hope.bx', 'broken.bx', 'hope.bx'], files)
-    expect(lines).toEqual(['hope.bx', 'hope.bx'])
+    const { entries, dropped } = applyStoredNames(
+      asEntries(['hope.bx', 'broken.bx', 'hope.bx']),
+      files,
+    )
+    expect(paths(entries)).toEqual(['hope.bx', 'hope.bx'])
     expect(dropped).toEqual(['broken.bx'])
   })
 
-  test('a line from outside this send is left alone', () => {
-    const { lines, dropped } = applyStoredNames(['delay(1.5)'], [sent('hope.bx', 'hope.bx')])
-    expect(lines).toEqual(['delay(1.5)'])
+  test('an entry from outside this send is left alone', () => {
+    const { entries, dropped } = applyStoredNames(
+      asEntries(['delay(1.5)']),
+      [sent('hope.bx', 'hope.bx')],
+    )
+    expect(paths(entries)).toEqual(['delay(1.5)'])
     expect(dropped).toEqual([])
+  })
+
+  /**
+   * The reason entries are objects at all. Nothing here writes these keys yet,
+   * but a rename must not be the thing that quietly drops a repeat count or a
+   * video offset once something does.
+   */
+  test('a renamed entry keeps every key that is not its path', () => {
+    const extra = { path: 'hope.bx', mode: 'count', count: 3, video_offset_ms: 2500 }
+    const { entries } = applyStoredNames([extra] as OssmEntry[], [sent('hope.bx', 'hope (2).bx')])
+    expect(entries[0]).toEqual({
+      path: 'hope (2).bx',
+      mode: 'count',
+      count: 3,
+      video_offset_ms: 2500,
+    } as OssmEntry)
   })
 })
 
@@ -94,8 +120,8 @@ describe('summarizeSend', () => {
   const result = (files: OssmSendFile[], playlist: OssmSendResult['playlist']): OssmSendResult => ({
     url: 'http://127.0.0.1:8081',
     files,
-    playlistLines: [],
-    droppedLines: [],
+    sentPlaylist: null,
+    droppedPaths: [],
     playlist,
     warnings: [],
   })

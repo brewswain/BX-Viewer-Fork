@@ -31,7 +31,7 @@ import {
   planOssmExport,
   summarizePlan,
 } from '@/lib/ossm/client'
-import { slugify } from '@/lib/ossm/naming'
+import { slugify, statesFlags } from '@/lib/ossm/naming'
 import type {
   OssmFileStatus,
   OssmPlan,
@@ -141,6 +141,12 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
   const [playlistSearch, setPlaylistSearch] = useState('')
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [bxplMode, setBxplMode] = useState<BxplMode>('per-playlist')
+  // Off by default, and that is the whole point: an export that says nothing
+  // about shuffle and loop is written as legacy v1, which the app loads without
+  // touching either toggle. Turning this on opts into v2 and into stating both.
+  const [stateFlags, setStateFlags] = useState(false)
+  const [shuffle, setShuffle] = useState(false)
+  const [loop, setLoop] = useState(false)
   const [bundleName, setBundleName] = useState('ossm-sauce')
   const [stage, setStage] = useState<'select' | 'review'>('select')
   const [plans, setPlans] = useState<GroupPlan[] | null>(null)
@@ -410,6 +416,10 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
       items: group.items,
       playlistTitle: group.playlistTitle,
       bundleName: bundleFor(group, total),
+      // Null, not false, unless the user asked to state them — `bxplBody` reads
+      // that as "no opinion" and writes the legacy format instead.
+      shuffle: stateFlags ? shuffle : null,
+      loop: stateFlags ? loop : null,
     }
   }
 
@@ -525,8 +535,10 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
       const replace = window.confirm(
         `${res.playlist.error}\n\nReplace it? Whatever is queued in OSSM Sauce now — possibly playing — is discarded. The paths are already stored either way.`,
       )
-      if (replace) {
-        res = { ...res, playlist: await sendOssmPlaylist(res.url, res.playlistLines, true) }
+      // `sentPlaylist` is what actually went out, flags and renames included —
+      // rebuilding it here would drop both.
+      if (replace && res.sentPlaylist) {
+        res = { ...res, playlist: await sendOssmPlaylist(res.url, res.sentPlaylist, true) }
       }
     }
     setBusy(false)
@@ -545,7 +557,7 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
       lines.push({
         count: res.playlist.entries,
         label: res.playlist.missing ? `queued, ${res.playlist.missing} missing` : 'queued',
-        ids: res.playlistLines,
+        ids: res.sentPlaylist?.entries.map((e) => e.path) ?? [],
       })
     if (res.playlist.outcome === 'conflict')
       lines.push({ count: 1, label: 'queue left alone', ids: ['playlist not loaded'] })
@@ -813,6 +825,63 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
    * the desktop's answer are different, and a setting on the server could only
    * hold one of them. Blank means "this page's hostname, port 8081".
    */
+  /**
+   * Shuffle and loop, which only a v2 `.bxpl` can carry — and which every v2
+   * file states whether it means to or not (`has_flags` is hard-true in
+   * `_parse_v2`). Left alone, the export stays on the legacy format and the
+   * app's own toggles survive it; that is why "leave alone" is a real choice
+   * here rather than a pair of unchecked boxes.
+   *
+   * Both or neither, because v2 has no way to write one without the other.
+   */
+  function flagsField() {
+    return (
+      <div style={{ marginTop: '0.15rem' }}>
+        <label style={{ ...NOTE, display: 'flex', gap: '0.45rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={stateFlags}
+            onChange={(e) => setStateFlags(e.target.checked)}
+          />
+          <span>
+            Set shuffle and loop on the playlist
+            {stateFlags ? '' : ' — off, so OSSM Sauce keeps whatever it has'}
+          </span>
+        </label>
+        {stateFlags ? (
+          <div style={{ display: 'flex', gap: '1rem', margin: '0.35rem 0 0 1.3rem' }}>
+            <label style={{ ...NOTE, display: 'flex', gap: '0.35rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={shuffle}
+                onChange={(e) => setShuffle(e.target.checked)}
+              />
+              <span>Shuffle</span>
+            </label>
+            <label style={{ ...NOTE, display: 'flex', gap: '0.35rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
+              <span>Loop</span>
+            </label>
+          </div>
+        ) : null}
+        <div style={{ ...NOTE, marginTop: '0.3rem', color: 'var(--text3)' }}>
+          {stateFlags ? (
+            <>
+              Writes the newer JSON <code>.bxpl</code>, and loading it in OSSM Sauce sets{' '}
+              <em>both</em> toggles to what you picked here — including the one you left
+              unchecked.
+            </>
+          ) : (
+            <>
+              Writes the legacy <code>.bxpl</code>, which carries no flags, so loading it
+              leaves the app&apos;s shuffle and loop exactly as the user had them.
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   function appUrlField() {
     return (
       <div>
@@ -912,7 +981,11 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
             </div>
             <div style={{ ...NOTE, marginTop: '0.3rem' }}>
               {plan!.playlist
-                ? `Playlists/${plan!.playlist.name} · ${plural(plan!.playlist.lines.length, 'line')}`
+                ? `Playlists/${plan!.playlist.name} · ${plural(plan!.playlist.entries.length, 'path')}${
+                    statesFlags(plan!.playlist)
+                      ? ` · shuffle ${plan!.playlist.shuffle ? 'on' : 'off'}, loop ${plan!.playlist.loop ? 'on' : 'off'}`
+                      : ''
+                  }`
                 : 'paths only — no .bxpl'}
             </div>
             <div className="export-pool" style={{ marginTop: '0.4rem' }}>
@@ -987,6 +1060,8 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
             <code>Playlists/</code>
           </span>
         </label>
+
+        {bxplMode === 'per-playlist' ? flagsField() : null}
 
         <div
           style={{

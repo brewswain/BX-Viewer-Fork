@@ -1,11 +1,15 @@
 # Handoff: emitting v2 `.bxpl`
 
 What this exporter would have to do to write OSSM Sauce's **v2** playlist format
-instead of the legacy one-name-per-line format it writes today, and what the app
-does with each field when it arrives.
+instead of the legacy one-name-per-line format, and what the app does with each
+field when it arrives.
 
-Not started. This is the spec and the hazards, written while the app side was
-fresh — not a plan anyone has committed to.
+**Partly done.** The root — `version`, `shuffle`, `loop`, `entries` — is written,
+gated on the user having stated the flags; see [Read this
+first](#read-this-first) and [Which format a `.bxpl` comes out
+in](./ossm-export.md#which-format-a-bxpl-comes-out-in). The per-entry keys
+(`mode`, `count`, `seconds`, `video_offset_ms`, `delay`) are **not**, and the
+rest of this document is still the spec for those.
 
 The mirror of this document, written for the app's maintainer, is
 `BX-VIEWER-EXPORT-HANDOFF.md` at the root of the OSSM Sauce working tree
@@ -16,9 +20,10 @@ The mirror of this document, written for the app's maintainer, is
 
 ## Read this first
 
-**Emitting v2 will silently turn off the user's shuffle and loop toggles.**
+**Emitting v2 unconditionally will silently turn off the user's shuffle and loop
+toggles.** *(Resolved — kept because it is why the exporter still writes v1 at
+all, and the constraint any future change has to hold.)*
 
-That is not a detail, it is the whole reason this is a handoff and not a patch.
 Legacy files carry no flags, so the app leaves the toggles alone
 (`ossm_sauce.gd:1019-1022`):
 
@@ -35,20 +40,28 @@ keys default to `false` when absent, and `has_flags` is true regardless. So the
 moment this exporter emits v2, every export asserts `shuffle: false, loop:
 false` at an app whose user may well have both on, and turns them off.
 
-This exporter holds no shuffle or loop state to put there. Options, roughly in
-order of honesty:
+**What was done: 1, plus the observation that the format choice is itself the
+answer.** The export overlay grew a shuffle/loop control that starts unset, and
+`bxplBody` picks the format from it — unset writes v1, which is the only way to
+decline to state the flags, and either one set writes v2 carrying both. So an
+export only overwrites those toggles when the user asked for it. Nothing was
+needed from upstream, and both formats load forever, so this is not a bet.
 
-1. **Give the export overlay its own shuffle/loop controls** and send what the
-   user picked. Now v2 is expressing something, which is the point.
-2. **Ask the app to distinguish "absent" from `false`** — the same null-vs-zero
-   treatment `video_offset_ms` already got. Cheap on that side (`data.has(...)`
-   rather than `data.get(..., false)`), and it makes a flag-less v2 file
-   possible. Needs a change over there, so it is a conversation, not a decision
-   to take unilaterally.
-3. Emit v2 and accept clobbering the toggles. Only defensible if the overlay
-   says so out loud.
+The two options not taken:
 
-Everything below assumes one of those is settled first.
+- **Ask the app to distinguish "absent" from `false`** — the same null-vs-zero
+  treatment `video_offset_ms` already got, `data.has(...)` rather than
+  `data.get(..., false)`. Not implemented here and **not yet raised with them**;
+  it is their change to make. It would compose with what shipped rather than
+  replace it: once a v2 file can decline to state the flags, the control grows a
+  third "leave alone" state and the v1 fallback becomes a compatibility path
+  instead of the mechanism. Nothing here depends on it happening.
+- **Emit v2 and accept clobbering the toggles.** Rejected — writing v1 costs
+  nothing and clobbers nothing.
+
+The residue is that setting one flag writes the other at `false`, because v2
+cannot say less. That is why the control sets them as a pair, and it is what the
+upstream fix would remove.
 
 ---
 
@@ -141,48 +154,50 @@ the playlist outright. The same reasoning applies to anything added later.
 
 ## Where the source is
 
-`bxplBody` (`lib/ossm/naming.ts:93`) is the single choke point — every route
-goes through it:
+`bxplBody` (`lib/ossm/naming.ts:131`) is the single choke point — every route
+goes through it, and it is where both the format choice and the serialisation
+live:
 
 ```ts
-export function bxplBody(lines: string[]): string {
-  return lines.map((l) => `${l}\n`).join('')
+export function bxplBody(playlist: OssmFlags & { entries: OssmEntry[] }): string {
+  if (!statesFlags(playlist)) return playlist.entries.map((e) => `${e.path}\n`).join('')
+  // …otherwise the v2 root, with both flags coerced to bool
 }
 ```
 
-Three callers, all of which pass a `string[]` that came from `playlistFor`
-(`lib/ossm/bundle.ts:330`):
+Three callers, all of which pass the `OssmPlaylist` built by `playlistFor`
+(`lib/ossm/bundle.ts:342`):
 
 | Call site | Route |
 |---|---|
-| `lib/ossm/storage.ts:485` | server-side install, writes into `Playlists/` |
-| `lib/ossm/bundle.ts:308` | zip download, `Playlists/<name>.bxpl` |
-| `lib/ossm/app.ts:242` | browser → app HTTP, `{ text }` to `/load_playlist` |
+| `lib/ossm/storage.ts:486` | server-side install, writes into `Playlists/` |
+| `lib/ossm/bundle.ts:315` | zip download, `Playlists/<name>.bxpl` |
+| `lib/ossm/app.ts:248` | browser → app HTTP, `{ text }` to `/load_playlist` |
 
-The shape of the change is to widen the currency from `string[]` to an entry
-array, and let `bxplBody` serialise it. Keeping one function that owns the bytes
-is what makes the three routes provably identical, so resist the temptation to
-build JSON at any individual call site.
+The currency between them is an **entry array**, not a `string[]` — entries are
+objects today only so the per-entry keys below can be added without touching
+these three sites again. Keeping one function that owns the bytes is what makes
+the routes provably identical, so resist the temptation to build JSON at any
+individual call site.
 
-### The hazard in `app.ts`
+### The hazard in `app.ts` *(handled)*
 
-`sendOssmPayload` rewrites the playlist *after* the files are uploaded
-(`lib/ossm/app.ts:202-216`). The app decides its own names on `/load_path` —
-name clashes become `foo (2).bx` — and answers with the name it chose, so each
-requested name is substituted for the stored one, and a line whose file never
-stored is dropped rather than left to be counted `missing`:
+`sendOssmPayload` rewrites the playlist *after* the files are uploaded. The app
+decides its own names on `/load_path` — name clashes become `foo (2).bx` — and
+answers with the name it chose, so each requested name is substituted for the
+stored one, and an entry whose file never stored is dropped rather than left to
+be counted `missing`.
 
-```ts
-const stored = new Map<string, string | null>()
-for (const f of files) stored.set(f.requested, f.stored)
-```
+That map used to be keyed by the line string itself and to rebuild the line from
+scratch. `applyStoredNames` (`lib/ossm/app.ts:204`) now keys on `entry.path` and
+spreads the rest of the entry through, so a renamed entry keeps its `count`,
+`seconds` and `video_offset_ms` once anything writes them. There is a test for
+that specifically, ahead of any writer existing.
 
-That map is keyed by the line string itself. Under v2 the substitution has to
-move to `entry.path` and leave every sibling key on the entry untouched — an
-entry that gets renamed must keep its `count`, `seconds` and `video_offset_ms`.
-`OssmSendResult.playlistLines` and `droppedLines` (`lib/ossm/types.ts:172-174`)
-are `string[]` and surface in the overlay; decide whether they stay names or
-become entries before touching them.
+`OssmSendResult` carries `sentPlaylist: OssmPlaylist | null` and
+`droppedPaths: string[]` (was `playlistLines` / `droppedLines`). The 409
+replace-queue retry re-sends `sentPlaylist` rather than rebuilding it, which is
+what keeps the flags on the retried request.
 
 ---
 
@@ -222,14 +237,19 @@ is unambiguously milliseconds, and a factor-of-1000 error here is silent.
 
 ## Tests
 
-`lib/ossm/bundle.test.ts`, `app.test.ts` and `storage.test.ts` all assert on the
-`.bxpl` body. Worth adding on top of whatever they become:
+`lib/ossm/naming.test.ts` covers `bxplBody` itself: the v1/v2 choice, the empty
+playlist, tab indent and key order against the app's writer, `version` staying at
+2, and the one-flag-writes-the-other wart — that last one is the test that
+changes if the upstream fix lands. `bundle.test.ts`, `app.test.ts` and
+`storage.test.ts` assert on the entries and the flags riding through.
 
-- A minimal queue round-trips to entries carrying only `path` — no default
-  `mode`/`count` noise.
-- A renamed file (`foo (2).bx`) keeps its repeat and offset keys.
+Already covered from the original list: a minimal queue round-trips to entries
+carrying only `path`, and a renamed file keeps its repeat and offset keys.
+
+Still to add, with the per-entry keys:
+
 - An entry with no offset omits the key entirely; one with `0` writes `0`.
-- Shuffle/loop carry whatever the overlay decided, per the warning at the top.
+- A `delay` entry, if this ever writes one.
 
 The app side has no fixture-based test suite to mirror this against — v2 parsing
 was verified there by a throwaway autoload, since deleted.

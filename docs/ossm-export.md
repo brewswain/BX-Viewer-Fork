@@ -12,9 +12,11 @@ Line references below are into the OSSM Sauce working tree at
 exporter assumes about that app, written for *that* app's maintainer — is
 `BX-VIEWER-EXPORT-HANDOFF.md` at the root of the same repo.
 
-The app has since grown a JSON playlist format carrying repeat modes and a
-per-entry video offset, which this exporter does not write. What that would take,
-and why it is not a free upgrade: [`ossm-bxpl-v2-handoff.md`](./ossm-bxpl-v2-handoff.md).
+The app has since grown a JSON playlist format carrying playlist-level
+shuffle/loop, per-entry repeat modes and a per-entry video offset. This exporter
+writes it **only when it has something to say** — see [Which format a `.bxpl` comes
+out in](#which-format-a-bxpl-comes-out-in). The per-entry keys are still unwritten;
+what those would take is [`ossm-bxpl-v2-handoff.md`](./ossm-bxpl-v2-handoff.md).
 
 ---
 
@@ -41,23 +43,64 @@ are named after the video rather than the source file — `hope.bx`, or
 `hopeless-hard.bx` when a video has several variants — so `Hard.bx` from two
 different videos can't collide.
 
-**`.bxpl` is a list of bare filenames**, LF-terminated, one per line, resolved
-against `Paths/` by name alone:
+**A `.bxpl` names files in `Paths/`, by name alone.** It comes out in one of the
+app's two formats. **Legacy v1** is LF-terminated, one name per line:
 
 ```
 hopeless-easy.bx
 hopeless-hard.bx
 ```
 
-That is the app's **legacy v1** format, and no longer what it writes itself:
-saving a playlist in OSSM Sauce now emits **v2 JSON** (`save_playlist.gd:30` →
-`PlaylistFormat.serialize`). The export is not broken by that — it is writing a
-format the app still reads but no longer produces. `PlaylistFormat.deserialize`
-sniffs the first non-whitespace character, takes `{` as v2, and otherwise falls
-through to the legacy line parser (`playlist_format.gd:68-74` → `_parse_legacy`,
-`playlist_format.gd:164-191`). A line that parser also understands, but that we
-never write, is `delay(2.5)` (`playlist_format.gd:172-176`): a pause instead of
-a path.
+**v2** is tab-indented JSON, and additionally carries the playlist's shuffle and
+loop state:
+
+```json
+{
+	"version": 2,
+	"shuffle": true,
+	"loop": false,
+	"entries": [
+		{ "path": "hopeless-easy.bx" },
+		{ "path": "hopeless-hard.bx" }
+	]
+}
+```
+
+`PlaylistFormat.deserialize` sniffs the first non-whitespace character, takes `{`
+as v2, and otherwise falls through to the legacy line parser
+(`playlist_format.gd:68-74` → `_parse_legacy`, `playlist_format.gd:164-191`), so
+both load and will keep loading. A legacy line that parser also understands, but
+that we never write, is `delay(2.5)` (`playlist_format.gd:172-176`): a pause
+instead of a path.
+
+### Which format a `.bxpl` comes out in
+
+The export overlay has a **Shuffle / Loop** control, and it starts *unset*. That
+is the whole of the rule:
+
+| Overlay | Written as | Effect on load |
+|---|---|---|
+| Both left unset | v1 | The app's own shuffle and loop toggles are left alone. |
+| Either one set | v2, carrying **both** | Both toggles are overwritten with what the overlay says. |
+
+The asymmetry is forced, and it is the reason the exporter can't just always
+write v2. Applying a playlist's flags is gated on `has_flags`
+(`ossm_sauce.gd:1019-1022`), which is `false` for legacy and hard-**`true`** for
+every v2 file (`playlist_format.gd:135`) — absent keys default to `false` rather
+than to "no opinion". So a v2 file cannot decline to state them, and an export
+that always wrote v2 would assert `shuffle: false, loop: false` at users who had
+either switched on and quietly switch them off. Declining to state them means
+writing v1.
+
+That also means setting *one* toggle writes the other at `false`, since v2 has no
+way to say less. The control sets them as a pair for that reason. The fix is
+upstream's to make — read these keys with `data.has(...)`, the way
+`video_offset_ms` already distinguishes absent from `0` — and has not been raised
+with them yet. If it ever lands, the control can grow a third "leave alone" state
+and this table collapses.
+
+`bxplBody` (`lib/ossm/naming.ts`) is the one function that makes this choice, and
+all three routes below reach the bytes through it.
 
 **Nothing is ever overwritten.** Before copying, each file is compared against
 what is already in `Paths/`:
@@ -216,12 +259,17 @@ the right two places by hand.
 
 ## Known limits
 
-- **A `.bxpl` carries ordering and nothing else.** It is a list of filenames, so
-  the playlist's title, author, tags, thumbnail and per-entry variant labels do
-  not survive the export. What arrives in OSSM Sauce is the sequence, under a
-  filename you chose. Emitting v2 instead would buy per-entry repeat and
-  playlist-level shuffle/loop (`playlist_format.gd:26-55` is the whole writer),
-  but no metadata fields — the format has nowhere to put them either.
+- **A `.bxpl` carries ordering, and at most shuffle/loop.** The playlist's title,
+  author, tags, thumbnail and per-entry variant labels do not survive the export.
+  What arrives in OSSM Sauce is the sequence, under a filename you chose. v2
+  wouldn't help: `playlist_format.gd:26-55` is the whole writer, and the format
+  has nowhere to put metadata either.
+- **Per-entry repeat and video offset are not written.** v2 can carry `mode` /
+  `count` / `seconds` / `video_offset_ms` per entry, and the entries this
+  exporter builds are objects so those keys can be added without another format
+  change. Nothing produces the values yet — `VideoMeta.offset` has no writer on
+  any video today. See [`ossm-bxpl-v2-handoff.md`](./ossm-bxpl-v2-handoff.md),
+  including the unresolved factor-of-1000 in that field's units.
 - **`meta.video_offset_ms` becomes a global setting, not a per-path one.**
   Loading a path copies that value into the single Video Offset field in the app
   (`ossm_sauce.gd:799-802`), so in a playlist each path overwrites the previous

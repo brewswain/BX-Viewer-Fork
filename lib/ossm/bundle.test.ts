@@ -14,7 +14,7 @@ import { ROOT } from '@/lib/paths'
 import {
   buildCandidates,
   buildPayload,
-  bxplLinesFor,
+  bxplEntriesFor,
   ossmBundleFilename,
   OssmRequestError,
 } from './bundle'
@@ -145,7 +145,7 @@ describe('buildCandidates validation', () => {
   })
 })
 
-describe('bxplLinesFor', () => {
+describe('bxplEntriesFor', () => {
   const planned = (
     videoId: string,
     sourceFile: string,
@@ -160,30 +160,41 @@ describe('bxplLinesFor', () => {
     bytes: 1,
   })
 
-  test('one line per item, in request order', () => {
+  const paths = (entries: { path: string }[]) => entries.map((e) => e.path)
+
+  test('one entry per item, in request order', () => {
     const files = [
       planned('Hope', 'Hope.bx', 'hope.bx'),
       planned('Hopeless', 'Hard.bx', 'hopeless-hard.bx'),
     ]
     const items = [item('Hopeless', 'Hard.bx'), item('Hope', 'Hope.bx'), item('Hopeless', 'Hard.bx')]
-    expect(bxplLinesFor(files, items)).toEqual(['hopeless-hard.bx', 'hope.bx', 'hopeless-hard.bx'])
+    expect(paths(bxplEntriesFor(files, items))).toEqual([
+      'hopeless-hard.bx',
+      'hope.bx',
+      'hopeless-hard.bx',
+    ])
+  })
+
+  test('an entry carries nothing but its path', () => {
+    const files = [planned('Hope', 'Hope.bx', 'hope.bx')]
+    expect(bxplEntriesFor(files, [item('Hope', 'Hope.bx')])).toEqual([{ path: 'hope.bx' }])
   })
 
   test('a renamed file is referenced by its suffixed name', () => {
     const files = [planned('Hope', 'Hope.bx', 'hope-9f8e7d6c.bx', 'renamed')]
-    expect(bxplLinesFor(files, [item('Hope', 'Hope.bx')])).toEqual(['hope-9f8e7d6c.bx'])
+    expect(paths(bxplEntriesFor(files, [item('Hope', 'Hope.bx')]))).toEqual(['hope-9f8e7d6c.bx'])
   })
 
   test('an identical file is referenced by the name already in Paths/', () => {
     const files = [planned('Hope', 'Hope.bx', 'Hope.bx', 'identical')]
-    expect(bxplLinesFor(files, [item('Hope', 'Hope.bx')])).toEqual(['Hope.bx'])
+    expect(paths(bxplEntriesFor(files, [item('Hope', 'Hope.bx')]))).toEqual(['Hope.bx'])
   })
 
-  test('an item with no planned file contributes no line', () => {
+  test('an item with no planned file contributes no entry', () => {
     const files = [planned('Hope', 'Hope.bx', 'hope.bx')]
-    expect(bxplLinesFor(files, [item('Nope', 'Nope.bx'), item('Hope', 'Hope.bx')])).toEqual([
-      'hope.bx',
-    ])
+    expect(
+      paths(bxplEntriesFor(files, [item('Nope', 'Nope.bx'), item('Hope', 'Hope.bx')])),
+    ).toEqual(['hope.bx'])
   })
 })
 
@@ -202,7 +213,7 @@ describe('buildPayload', () => {
     for (const f of payload.files) expect(f).not.toHaveProperty('sourcePath')
   })
 
-  test('the playlist lines match the names the files are posted under', async () => {
+  test('the playlist entries match the names the files are posted under', async () => {
     const payload = await buildPayload(
       {
         items: [item('Hopeless', 'Hard.bx'), item('Hope', 'Hope.bx'), item('Hopeless', 'Hard.bx')],
@@ -212,17 +223,34 @@ describe('buildPayload', () => {
     )
     expect(payload.playlist).toEqual({
       name: 'Set',
-      lines: ['hopeless-hard.bx', 'hope.bx', 'hopeless-hard.bx'],
+      entries: [
+        { path: 'hopeless-hard.bx' },
+        { path: 'hope.bx' },
+        { path: 'hopeless-hard.bx' },
+      ],
+      // A request that said nothing about them stays unset, so the body comes
+      // out as legacy v1 and the app's own toggles survive the load.
+      shuffle: null,
+      loop: null,
     })
   })
 
-  test('an unreadable path is a warning and contributes no line', async () => {
+  test('the flags ride through to the playlist when the request states them', async () => {
+    const payload = await buildPayload(
+      { items: [item('Hope', 'Hope.bx')], playlistTitle: 'Set', shuffle: true, loop: false },
+      base,
+    )
+    expect(payload.playlist?.shuffle).toBe(true)
+    expect(payload.playlist?.loop).toBe(false)
+  })
+
+  test('an unreadable path is a warning and contributes no entry', async () => {
     const payload = await buildPayload(
       { items: [item('Hopeless', 'Easy.bx'), item('Hope', 'Hope.bx')], playlistTitle: 'Set' },
       base,
     )
     expect(payload.files.map((f) => f.name)).toEqual(['hope.bx'])
-    expect(payload.playlist?.lines).toEqual(['hope.bx'])
+    expect(payload.playlist?.entries).toEqual([{ path: 'hope.bx' }])
     expect(payload.warnings).toHaveLength(1)
     expect(payload.warnings[0]).toContain('Easy.bx')
   })

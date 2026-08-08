@@ -87,14 +87,26 @@ export default function OssmExportPanel({
   const [appUrl, setAppUrl] = useState('')
   const [checked, setChecked] = useState<string | null>(null)
   const [send, setSend] = useState<OssmSendResult | null>(null)
+  // Off by default so the export says nothing about shuffle and loop, which is
+  // written as the legacy format and leaves the app's own toggles alone.
+  const [stateFlags, setStateFlags] = useState(false)
+  const [shuffle, setShuffle] = useState(false)
+  const [loop, setLoop] = useState(false)
 
   useEffect(() => {
     setAppUrl(resolveOssmAppUrl(getSettings().ossmAppUrl))
   }, [])
 
   const request = useMemo<OssmRequest>(
-    () => ({ items, playlistTitle, bundleName }),
-    [items, playlistTitle, bundleName],
+    // Null rather than false unless the user asked to state them — see `bxplBody`.
+    () => ({
+      items,
+      playlistTitle,
+      bundleName,
+      shuffle: stateFlags ? shuffle : null,
+      loop: stateFlags ? loop : null,
+    }),
+    [items, playlistTitle, bundleName, stateFlags, shuffle, loop],
   )
 
   // A plan describes one exact request. Switching track or .bx variant makes it
@@ -106,8 +118,11 @@ export default function OssmExportPanel({
         items.map((i) => `${i.videoId}/${i.bxFile}`),
         playlistTitle ?? null,
         bundleName,
+        // The flags change the .bxpl's contents *and* its format, so a plan
+        // taken before they moved describes a different file.
+        stateFlags ? [shuffle, loop] : null,
       ]),
-    [items, playlistTitle, bundleName],
+    [items, playlistTitle, bundleName, stateFlags, shuffle, loop],
   )
   useEffect(() => {
     setPlan(null)
@@ -200,10 +215,11 @@ export default function OssmExportPanel({
 
   /** Only after the user has been asked — a 409 means something may be playing. */
   async function onReplaceQueue() {
-    if (!send) return
+    if (!send?.sentPlaylist) return
     setBusy('replace')
     setError(null)
-    const playlist = await sendOssmPlaylist(send.url, send.playlistLines, true)
+    // Resend exactly what went out the first time — flags and stored names both.
+    const playlist = await sendOssmPlaylist(send.url, send.sentPlaylist, true)
     setSend({ ...send, playlist })
     setBusy(null)
   }
@@ -226,6 +242,48 @@ export default function OssmExportPanel({
           flat Paths folder.
         </p>
       )}
+
+      {/* Shuffle and loop only exist in the v2 `.bxpl`, and every v2 file states
+          them whether it means to or not. Left off, the export stays on the
+          legacy format and OSSM Sauce keeps the toggles the user had — so this
+          is opt-in, and it sets both or neither. */}
+      {!empty && playlistTitle ? (
+        <div className="ossm-flags">
+          <label className="ossm-flag-row">
+            <input
+              type="checkbox"
+              checked={stateFlags}
+              onChange={(e) => setStateFlags(e.target.checked)}
+            />
+            <span>Set shuffle and loop</span>
+          </label>
+          {stateFlags ? (
+            <div className="ossm-flag-pair">
+              <label className="ossm-flag-row">
+                <input
+                  type="checkbox"
+                  checked={shuffle}
+                  onChange={(e) => setShuffle(e.target.checked)}
+                />
+                <span>Shuffle</span>
+              </label>
+              <label className="ossm-flag-row">
+                <input
+                  type="checkbox"
+                  checked={loop}
+                  onChange={(e) => setLoop(e.target.checked)}
+                />
+                <span>Loop</span>
+              </label>
+            </div>
+          ) : null}
+          <p className="ossm-note ossm-flag-note">
+            {stateFlags
+              ? 'Loading this playlist sets both toggles in OSSM Sauce, including the one left unchecked.'
+              : 'OSSM Sauce keeps whatever shuffle and loop it already has.'}
+          </p>
+        </div>
+      ) : null}
 
       <div className="ossm-actions">
         <button

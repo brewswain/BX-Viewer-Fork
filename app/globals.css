@@ -5194,6 +5194,29 @@ body:has(.manager-layout) {
   padding-left: 0.5rem;
 }
 
+/* Shuffle/loop for the .bxpl. Opt-in, because stating them at all is what
+   commits the export to the v2 format — and to overwriting the app's toggles. */
+.ossm-flags {
+  margin-bottom: 0.6rem;
+}
+.ossm-flag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--text2);
+  cursor: pointer;
+}
+.ossm-flag-pair {
+  display: flex;
+  gap: 1rem;
+  margin: 0.3rem 0 0 1.15rem;
+}
+.ossm-flag-note {
+  margin: 0.3rem 0 0;
+  color: var(--text3);
+}
+
 .ossm-actions {
   display: flex;
   flex-wrap: wrap;

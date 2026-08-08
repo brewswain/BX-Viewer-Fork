@@ -14,12 +14,51 @@ export type OssmItem = {
   bxFile: string
 }
 
-export type OssmRequest = {
+export type OssmRequest = OssmFlags & {
   items: OssmItem[]
   /** Becomes the `.bxpl` filename. Omit for a paths-only export (watch page). */
   playlistTitle?: string | null
   /** Zip filename, download route only. */
   bundleName?: string | null
+}
+
+/**
+ * Playlist-level shuffle and loop, as the export overlay left them.
+ *
+ * `null` means the user said nothing, and it is emphatically not `false`. The
+ * app writes both toggles from any v2 file it loads — `_parse_v2` reports
+ * `has_flags` as true unconditionally (`playlist_format.gd:135`) and
+ * `apply_playlist` takes that as permission (`ossm_sauce.gd:1019-1022`) — so a
+ * v2 export that guesses `false` turns off a shuffle the user had on. Legacy v1
+ * carries no flags and the app leaves them alone, which is what an unset pair is
+ * emitted as. See `bxplBody`.
+ *
+ * Set as a pair or not at all: the format cannot state one without the other.
+ */
+export type OssmFlags = {
+  shuffle?: boolean | null
+  loop?: boolean | null
+}
+
+/**
+ * One `.bxpl` entry.
+ *
+ * Only `path` today. The v2 format also carries `mode`/`count`/`seconds` and
+ * `video_offset_ms` (`playlist_format.gd:141`), and this is the shape they land
+ * on once this exporter has a source for them. An object rather than a bare
+ * filename so that adding one is a field on a type, not a change of currency
+ * through all three export routes.
+ */
+export type OssmEntry = {
+  /** Bare filename, resolved against `Paths/` by name alone. */
+  path: string
+}
+
+/** A `.bxpl` as planned: its filename stem, its entries, and its flags. */
+export type OssmPlaylist = OssmFlags & {
+  /** Sanitized (`sanitizeBxplName`), without the extension. */
+  name: string
+  entries: OssmEntry[]
 }
 
 /**
@@ -76,7 +115,7 @@ export type OssmPlan = {
    */
   canInstall: boolean
   files: OssmPlanFile[]
-  playlist: { name: string; lines: string[] } | null
+  playlist: OssmPlaylist | null
   warnings: string[]
 }
 
@@ -127,8 +166,8 @@ export type OssmPayloadFile = {
  */
 export type OssmPayload = {
   files: OssmPayloadFile[]
-  /** `.bxpl` name (no extension) and its lines, or null for a paths-only send. */
-  playlist: { name: string; lines: string[] } | null
+  /** The `.bxpl` to post after the files land, or null for a paths-only send. */
+  playlist: OssmPlaylist | null
   warnings: string[]
 }
 
@@ -168,10 +207,15 @@ export type OssmSendResult = {
   /** The base URL every request went to, so a failure can name it. */
   url: string
   files: OssmSendFile[]
-  /** Names the `.bxpl` was built from, after substituting what the app answered. */
-  playlistLines: string[]
-  /** Lines dropped because their file never stored — they would only be `missing`. */
-  droppedLines: string[]
+  /**
+   * The `.bxpl` as actually posted — entry paths substituted for the names the
+   * app answered with, and dropped entries already removed. Null for a
+   * paths-only send. Hand this straight back to `sendOssmPlaylist` to retry a
+   * 409; rebuilding it from `files` would lose the flags.
+   */
+  sentPlaylist: OssmPlaylist | null
+  /** Paths left out because their file never stored — they would only be `missing`. */
+  droppedPaths: string[]
   playlist: OssmPlaylistResult
   warnings: string[]
 }

@@ -16,11 +16,13 @@ import { bxplBody, ossmPathName, sanitizeBxplName, suffixName } from './naming'
 import { planFiles, resolveOssmTarget } from './storage'
 import type {
   OssmCandidate,
+  OssmEntry,
   OssmItem,
   OssmPayload,
   OssmPayloadFile,
   OssmPlan,
   OssmPlannedFile,
+  OssmPlaylist,
   OssmRequest,
   OssmServerPlan,
 } from './types'
@@ -73,6 +75,11 @@ export function parseOssmRequest(raw: string): ParsedOssmRequest {
       items,
       playlistTitle: typeof payload.playlistTitle === 'string' ? payload.playlistTitle : null,
       bundleName: typeof payload.bundleName === 'string' ? payload.bundleName : null,
+      // Anything that isn't a bool is "unset", which is a meaningful state here
+      // rather than a parse failure — see `OssmFlags`. A client that omits them
+      // entirely gets the legacy format, exactly as before this existed.
+      shuffle: typeof payload.shuffle === 'boolean' ? payload.shuffle : null,
+      loop: typeof payload.loop === 'boolean' ? payload.loop : null,
     },
   }
 }
@@ -167,21 +174,21 @@ export async function buildCandidates(
 }
 
 /**
- * `.bxpl` body lines, in request order.
+ * `.bxpl` entries, in request order.
  *
- * The name comes from the *plan*, never from re-deriving it: a `renamed` entry
- * carries the suffixed name it actually took in `Paths/`, and a line built from
- * the original name would point the playlist at a different video's file. Items
- * that were skipped have no planned file and so contribute no line.
+ * The path comes from the *plan*, never from re-deriving it: a `renamed` entry
+ * carries the suffixed name it actually took in `Paths/`, and an entry built
+ * from the original name would point the playlist at a different video's file.
+ * Items that were skipped have no planned file and so contribute no entry.
  */
-export function bxplLinesFor(planned: OssmPlannedFile[], items: OssmItem[]): string[] {
+export function bxplEntriesFor(planned: OssmPlannedFile[], items: OssmItem[]): OssmEntry[] {
   const names = new Map(planned.map((p) => [sourceKey(p.videoId, p.sourceFile), p.name]))
-  const lines: string[] = []
+  const entries: OssmEntry[] = []
   for (const item of items) {
     const name = names.get(sourceKey(item.videoId, item.bxFile))
-    if (name) lines.push(name)
+    if (name) entries.push({ path: name })
   }
-  return lines
+  return entries
 }
 
 /**
@@ -275,7 +282,7 @@ function installNotes(): string {
  */
 export function buildOssmArchive(
   planned: OssmPlannedFile[],
-  playlist: { name: string; lines: string[] } | null,
+  playlist: OssmPlaylist | null,
 ): archiver.Archiver {
   const archive = archiver('zip')
 
@@ -305,7 +312,7 @@ export function buildOssmArchive(
       // Path data is JSON, so it deflates well — no STORE special case.
       for (const file of planned) archive.file(file.sourcePath, { name: `Paths/${file.name}` })
       if (playlist) {
-        archive.append(bxplBody(playlist.lines), { name: `Playlists/${playlist.name}.bxpl` })
+        archive.append(bxplBody(playlist), { name: `Playlists/${playlist.name}.bxpl` })
       }
       await archive.finalize()
     } catch (e) {
@@ -326,15 +333,22 @@ export function ossmBundleFilename(raw: unknown): string {
   return `${name || 'paths'}-ossm.zip`
 }
 
-/** The `.bxpl` for a request, or null for a paths-only export. */
+/**
+ * The `.bxpl` for a request, or null for a paths-only export.
+ *
+ * The flags ride along untouched — `bxplBody` is where unset turns into a
+ * choice of format, so every route reaches that decision through the same door.
+ */
 export function playlistFor(
   request: OssmRequest,
   planned: OssmPlannedFile[],
-): { name: string; lines: string[] } | null {
+): OssmPlaylist | null {
   if (!request.playlistTitle) return null
   return {
     name: sanitizeBxplName(request.playlistTitle),
-    lines: bxplLinesFor(planned, request.items),
+    entries: bxplEntriesFor(planned, request.items),
+    shuffle: request.shuffle ?? null,
+    loop: request.loop ?? null,
   }
 }
 

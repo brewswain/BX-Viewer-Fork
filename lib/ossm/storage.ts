@@ -39,6 +39,7 @@ import type {
   OssmFileStatus,
   OssmInstallResult,
   OssmPlannedFile,
+  OssmPlaylist,
   OssmTarget,
 } from './types'
 
@@ -450,7 +451,7 @@ async function firstFreeName(dir: string, base: string, ext: string): Promise<st
 export async function installFiles(
   target: OssmTarget,
   planned: OssmPlannedFile[],
-  playlist: { name: string; lines: string[] } | null,
+  playlist: OssmPlaylist | null,
 ): Promise<OssmInstallResult> {
   if (!target.dir) {
     throw new Error(
@@ -482,7 +483,7 @@ export async function installFiles(
   if (playlist) {
     const base = bxplFileBase(playlist.name)
     const wanted = `${base}.bxpl`
-    const body = bxplBody(playlist.lines)
+    const body = bxplBody(playlist)
     // A file already holding exactly these lines *is* this playlist, so
     // re-installing the same export is a no-op rather than another
     // "Set (2).bxpl". Matches how paths dedupe on content; only a playlist of
