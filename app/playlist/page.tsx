@@ -109,7 +109,7 @@ function PlaylistInner() {
   // Loop / shuffle / per-track repeat, plus which track is playing. External so
   // the engine's `onEnded` — built once per playlist — can read it at event time
   // without the page keeping a mirror ref beside a piece of state.
-  const { prefs, currentIndex, currentFolder } = usePlayback()
+  const { prefs, order, position, currentIndex, currentFolder } = usePlayback()
   // The user's variant picks, keyed by track index. Recorded rather than left in
   // the dropdown so a revisited track keeps its pick and the OSSM export sends
   // the paths that were actually played. The ref is what `loadTrack` reads: it
@@ -490,6 +490,16 @@ function PlaylistInner() {
   const { id, playlist, metas } = loaded
   const current = metas[currentIndex] ?? metas[0]
 
+  // The sidebar is the answer to "what plays next", so it lists tracks in play
+  // order rather than playlist order — shuffling reorders the rows, and turning
+  // it off puts them back. `order` is empty until the engine effect has run.
+  const playOrder =
+    order.length === metas.length ? order : metas.map((_, i) => i)
+  // Counters follow the same order: with shuffle on, "5 / 23" means the fifth
+  // thing that will play, which is the row number the sidebar highlights.
+  const currentPos = playOrder.indexOf(currentIndex)
+  const trackDisplay = `${(currentPos >= 0 ? currentPos : position) + 1} / ${metas.length}`
+
   const bxSelectNode = bxSelect ? (
     <select
       className="bx-select"
@@ -533,7 +543,7 @@ function PlaylistInner() {
               shuffle={prefs.shuffle}
               onToggleShuffle={() => toggleShuffle(metas.length)}
               totalCount={metas.length}
-              trackDisplay={`${currentIndex + 1} / ${metas.length}`}
+              trackDisplay={trackDisplay}
               bxSelect={bxSelectNode}
               onPrevTrack={() => stepTrack(-1)}
               onNextTrack={() => stepTrack(1)}
@@ -566,7 +576,7 @@ function PlaylistInner() {
               <div className="stat-item">
                 <span className="stat-label">Track</span>
                 <span className="stat-value" id="plTrackNum">
-                  {`${currentIndex + 1} / ${metas.length}`}
+                  {trackDisplay}
                 </span>
               </div>
             </div>
@@ -605,7 +615,8 @@ function PlaylistInner() {
               {`${playlist.title || 'Playlist'} — ${metas.length} videos`}
             </div>
             <div className="playlist-track-list" id="playlistTrackList">
-              {metas.map((m, i) => {
+              {playOrder.map((i, pos) => {
+                const m = metas[i]
                 const folder = m._folder
                 const thumbSrc = m.thumbnail
                   ? `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(m.thumbnail)}`
@@ -626,7 +637,7 @@ function PlaylistInner() {
                     key={i}
                     onClick={() => loadTrackRef.current?.(i)}
                   >
-                    <div className="ptrack-num">{i + 1}</div>
+                    <div className="ptrack-num">{pos + 1}</div>
                     <div className="ptrack-thumb">
                       {thumbSrc ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
