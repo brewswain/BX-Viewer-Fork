@@ -12,6 +12,10 @@ Line references below are into the OSSM Sauce working tree at
 exporter assumes about that app, written for *that* app's maintainer — is
 `BX-VIEWER-EXPORT-HANDOFF.md` at the root of the same repo.
 
+The app has since grown a JSON playlist format carrying repeat modes and a
+per-entry video offset, which this exporter does not write. What that would take,
+and why it is not a free upgrade: [`ossm-bxpl-v2-handoff.md`](./ossm-bxpl-v2-handoff.md).
+
 ---
 
 ## What it writes
