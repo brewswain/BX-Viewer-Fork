@@ -52,7 +52,9 @@ The two options not taken:
 - **Ask the app to distinguish "absent" from `false`** — the same null-vs-zero
   treatment `video_offset_ms` already got, `data.has(...)` rather than
   `data.get(..., false)`. Not implemented here and **not yet raised with them**;
-  it is their change to make. It would compose with what shipped rather than
+  it is their change to make. The argument is written up in
+  [`ossm-sauce-issue-draft.md`](./ossm-sauce-issue-draft.md), unfiled. It would
+  compose with what shipped rather than
   replace it: once a v2 file can decline to state the flags, the control grows a
   third "leave alone" state and the v1 fallback becomes a compatibility path
   instead of the mechanism. Nothing here depends on it happening.
