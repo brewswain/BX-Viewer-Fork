@@ -61,6 +61,25 @@ export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
   minCmdMs: DEFAULT_LINEARIZE.minCmdMs,
 }
 
+/**
+ * Whether a player page that has just opened should start itself.
+ *
+ * With no machine attached the video is just a video, so it plays on click, as
+ * every other viewer does. With one attached it is a script for hardware, and
+ * starting unattended is the wrong default: playback waits for a deliberate
+ * press. `autoConnect` counts as attached even before the socket is up — it is
+ * still opening while the video reaches `canplay`, so deciding on
+ * `isConnected()` alone would autoplay into a connection that lands a moment
+ * later.
+ */
+export function shouldAutoplay(
+  config: Pick<DeviceConfig, 'enabled' | 'autoConnect'>,
+  connected: boolean,
+): boolean {
+  if (!config.enabled) return true
+  return !connected && !config.autoConnect
+}
+
 /** Immutable snapshot for React. Replaced wholesale whenever anything changes. */
 export type DeviceState = {
   connection: ConnectionState

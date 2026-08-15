@@ -18,7 +18,7 @@ import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
 import VideoWrap from '@/components/player/VideoWrap'
-import { deviceManager } from '@/lib/device/manager'
+import { deviceManager, shouldAutoplay } from '@/lib/device/manager'
 import {
   buildPath,
   findPeaks,
@@ -281,6 +281,13 @@ function WatchInner() {
 
     const userSettings = getSettings()
     let hasCanPlayed = false
+    // Decided once, on load: a machine that connects later must not yank the
+    // video into motion, and one that disconnects must not stop it.
+    const autoplay = shouldAutoplay(
+      deviceConfigFromSettings(userSettings),
+      deviceManager.isConnected(),
+    )
+    let hasAutoplayed = false
     let seekingLongTimer: ReturnType<typeof setTimeout> | null = null
 
     lastHighlightedRef.current = -1
@@ -312,12 +319,23 @@ function WatchInner() {
         videoSeekingOverlayHint.setAttribute('aria-hidden', 'true')
     }
 
+    // `canplay` fires again after seeks and re-buffers, so this is one-shot:
+    // only the very first ready state starts playback. A rejected promise means
+    // the browser wanted a gesture first, which leaves the video paused with its
+    // play glyph showing — the same place it sits today.
+    function maybeAutoplay() {
+      if (!autoplay || hasAutoplayed) return
+      hasAutoplayed = true
+      void video!.play().catch(() => {})
+    }
+
     function onCanPlay() {
       hasCanPlayed = true
       if (videoLoadingOverlay)
         videoLoadingOverlay.setAttribute('aria-hidden', 'true')
       if (videoBufferingOverlay)
         videoBufferingOverlay.setAttribute('aria-hidden', 'true')
+      maybeAutoplay()
     }
 
     function onWaiting() {
@@ -433,6 +451,10 @@ function WatchInner() {
       },
     })
     engineRef.current = engine
+
+    // A cached video can already be past `canplay` by the time the engine is
+    // built, in which case the event it listens for has been and gone.
+    if (video.readyState >= 3) maybeAutoplay()
 
     engine.loadBxData(
       path,

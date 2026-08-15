@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createButtplugSim, type Simulator } from '@/scripts/buttplug-sim'
-import { deviceManager } from './manager'
+import { deviceManager, shouldAutoplay } from './manager'
 import type { Marker } from '@/lib/player/types'
 import { FPS } from '@/lib/player/constants'
 
@@ -238,3 +238,31 @@ describe('deviceManager end to end', () => {
     expect(markers[1].frame / FPS).toBeCloseTo(0.5, 6)
   })
 })
+
+describe('shouldAutoplay', () => {
+  test('plays on its own when output is off, whatever the socket says', () => {
+    expect(shouldAutoplay({ enabled: false, autoConnect: false }, false)).toBe(
+      true,
+    )
+    expect(shouldAutoplay({ enabled: false, autoConnect: true }, true)).toBe(
+      true,
+    )
+  })
+
+  test('waits for a press once a machine is attached', () => {
+    expect(shouldAutoplay({ enabled: true, autoConnect: false }, true)).toBe(
+      false,
+    )
+    // Auto-connect counts even before the socket is up: it lands moments later.
+    expect(shouldAutoplay({ enabled: true, autoConnect: true }, false)).toBe(
+      false,
+    )
+  })
+
+  test('enabled but not connected and not auto-connecting still plays', () => {
+    expect(shouldAutoplay({ enabled: true, autoConnect: false }, false)).toBe(
+      true,
+    )
+  })
+})
+

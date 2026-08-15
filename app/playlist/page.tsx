@@ -17,7 +17,7 @@ import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
 import VideoWrap from '@/components/player/VideoWrap'
-import { deviceManager } from '@/lib/device/manager'
+import { deviceManager, shouldAutoplay } from '@/lib/device/manager'
 import {
   buildPath,
   loadEffectFonts,
@@ -283,7 +283,10 @@ function PlaylistInner() {
     })
     engineRef.current = engine
 
-    async function loadTrack(index: number) {
+    // `autoplay` is false only for the first track when a machine is attached:
+    // every later call comes from the user advancing or from `onEnded`, where
+    // playback is already under way and stopping between tracks would be wrong.
+    async function loadTrack(index: number, autoplay = true) {
       const meta = metas[index]
       const folder = meta._folder
       // Title / authors / description / track counters, the active row, and the
@@ -349,13 +352,16 @@ function PlaylistInner() {
       video!.src = `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(meta.videoFile || '')}`
       video!.load()
       engine.resizeCanvas()
-      video!.play().catch(() => {})
+      if (autoplay) video!.play().catch(() => {})
     }
 
     loadTrackRef.current = loadTrack
 
     // ── Start first track ─────────────────────────────────────────────────────
-    loadTrack(getPlaybackState().order[0] ?? 0)
+    loadTrack(
+      getPlaybackState().order[0] ?? 0,
+      shouldAutoplay(deviceConfig, deviceManager.isConnected()),
+    )
 
     return () => {
       engine.destroy()
