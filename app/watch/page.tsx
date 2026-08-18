@@ -98,6 +98,9 @@ function WatchInner() {
   const totalFramesRef = useRef(0)
   const activeMarkersRef = useRef<Marker[]>([])
   const lastHighlightedRef = useRef(-1)
+  // The per-frame highlight scan walks outward from here instead of restarting
+  // at 0 every frame; see the comment on the scan itself.
+  const markerCursorRef = useRef(0)
   const bxIndexRef = useRef(0)
   const bxInitRef = useRef<Loaded | null>(null)
 
@@ -215,6 +218,17 @@ function WatchInner() {
     [loaded, activeBxIndex],
   )
   activeMarkersRef.current = activeMarkers
+  // Read from the engine's per-frame callback, which is created once and must
+  // not close over a stale tab.
+  const sidebarTabRef = useRef(sidebarTab)
+  sidebarTabRef.current = sidebarTab
+
+  // Rows are unmounted while the panel is off, so the remembered index refers to
+  // an element that no longer exists — without this the row it names comes back
+  // unhighlighted and stays that way until the playhead reaches the next marker.
+  useEffect(() => {
+    lastHighlightedRef.current = -1
+  }, [sidebarTab, activeBxIndex])
 
   // Follows the .bx dropdown: exporting a variant the user isn't watching would
   // be silently wrong.
@@ -407,20 +421,37 @@ function WatchInner() {
       if (curFrameEl) curFrameEl.textContent = String(curFrame)
       if (curDepthEl) curDepthEl.textContent = curDepth.toFixed(3)
 
-      let nearestIdx = -1,
-        nearestDist = Infinity
-      activeMarkersRef.current.forEach((m, i) => {
-        const dist = Math.abs(m.frame - curFrame)
-        if (dist < nearestDist) {
-          nearestDist = dist
-          nearestIdx = i
-        }
-      })
+      // The rows this highlights only exist while the bx panel is the active
+      // tab (see the marker list below), so off that tab there is nothing to
+      // find and the whole scan is wasted work — on a ~4k-marker clip it was a
+      // full linear pass 60×/sec against a list that wasn't in the DOM.
+      if (sidebarTabRef.current !== 'bx') return
+
+      // Markers are frame-sorted and the playhead moves monotonically, so the
+      // nearest one is almost always at or beside the last one. Walk from there
+      // instead of rescanning: O(1) amortised for playback, and a seek just
+      // walks further that once.
+      const markers = activeMarkersRef.current
+      let nearestIdx = -1
+      if (markers.length > 0) {
+        let i = Math.min(markerCursorRef.current, markers.length - 1)
+        while (i + 1 < markers.length && markers[i + 1].frame <= curFrame) i++
+        while (i > 0 && markers[i].frame > curFrame) i--
+        // `i` is the last marker at or before the playhead; its successor can
+        // still be the closer of the two.
+        const next = i + 1 < markers.length ? i + 1 : i
+        nearestIdx =
+          Math.abs(markers[next].frame - curFrame) <
+          Math.abs(markers[i].frame - curFrame)
+            ? next
+            : i
+        markerCursorRef.current = i
+      }
       if (nearestIdx !== lastHighlightedRef.current) {
         const prev = markerListEl?.querySelector('.marker-list-item.current')
         if (prev) prev.classList.remove('current')
-        const next = document.getElementById(`mli-${nearestIdx}`)
-        if (next) next.classList.add('current')
+        const nextEl = document.getElementById(`mli-${nearestIdx}`)
+        if (nextEl) nextEl.classList.add('current')
         lastHighlightedRef.current = nearestIdx
       }
     }

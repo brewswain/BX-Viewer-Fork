@@ -14,7 +14,6 @@ import {
   ZOOM_RANGE,
   clampStretch,
   clampZoom,
-  fitTransform,
   theaterFit,
 } from './theaterFit'
 
@@ -120,15 +119,5 @@ describe('cap clamping', () => {
   test('the shipped defaults are themselves in range', () => {
     expect(clampStretch(MAX_STRETCH)).toBe(MAX_STRETCH)
     expect(clampZoom(MAX_ZOOM)).toBe(MAX_ZOOM)
-  })
-})
-
-describe('fitTransform', () => {
-  test('is empty for identity, so the style can be cleared', () => {
-    expect(fitTransform({ scaleX: 1, scaleY: 1 })).toBe('')
-  })
-
-  test('renders both axes', () => {
-    expect(fitTransform({ scaleX: 1.2, scaleY: 1.1 })).toBe('scale(1.2000, 1.1000)')
   })
 })

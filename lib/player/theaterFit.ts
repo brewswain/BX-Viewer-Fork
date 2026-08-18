@@ -102,9 +102,3 @@ export function theaterFit(
   const zoom = Math.min(gap / stretch, Math.max(1, maxZoom))
   return { scaleX: stretch * zoom, scaleY: zoom }
 }
-
-/** The `transform` value for a fit, or `''` when it changes nothing. */
-export function fitTransform(fit: TheaterFit): string {
-  if (fit.scaleX === 1 && fit.scaleY === 1) return ''
-  return `scale(${fit.scaleX.toFixed(4)}, ${fit.scaleY.toFixed(4)})`
-}

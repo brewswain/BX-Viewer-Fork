@@ -35,7 +35,6 @@ import {
 import {
   clampStretch,
   clampZoom,
-  fitTransform,
   theaterFit,
   type TheaterFit,
 } from './theaterFit'
@@ -192,6 +191,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const btnCloseDrawer = byId<HTMLButtonElement>('btnTheaterSidebarClose')
   const tapIndicator = byId<HTMLElement>('videoTapIndicator')
   const tapIndicatorIcon = byId<HTMLElement>('videoTapIndicatorIcon') // <svg>
+  // Cached rather than looked up per call: theater's mousemove handler reaches
+  // for both on every pointer event.
+  const playerContainer = byId<HTMLElement>('playerContainer')
+  const controlsBar = playerContainer.querySelector<HTMLElement>('.player-controls')
 
   const COLORS = buildColors(userSettings)
 
@@ -218,6 +221,16 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let scrubbing = false
   let hideControlsTimer: ReturnType<typeof setTimeout> | null = null
   let cursorTimer: ReturnType<typeof setTimeout> | null = null
+  // Mirrors the `controls-visible` class. Read every rAF (the loop skips writing
+  // to a bar nobody can see) and on every mousemove, so it is a flag rather than
+  // a `classList.contains` call.
+  let controlsVisible = false
+  /** Last whole second written to the timecode, so repeats can be skipped. */
+  let lastTimecodeSecs = -1
+  /** Cached control-bar height; 0 means "re-measure on next raise". */
+  let controlsBarH = 0
+  /** Geometry last written by `applyTheaterFit`, so it can skip no-op writes. */
+  let lastFitSig = ''
   let isTheater = false
   // The persisted starting point, and the live copy the popover drags. Kept
   // apart so Reset has something to go back to without re-reading storage.
@@ -347,27 +360,82 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   /**
    * Push the picture out into the pillarbox bars theater's stage leaves it.
-   * Transform only — the layout box, the strip and the canvas are untouched, so
-   * this can run as often as it likes. Outside theater the style is cleared and
-   * `object-fit: contain` is back in sole charge.
    *
-   * `clientWidth/Height` rather than `getBoundingClientRect`, which would report
-   * the box we just scaled and wind the stretch up on every call.
+   * The geometry is the element's own box plus `object-fit: fill`, NOT a
+   * `transform: scale()`. Both produce the identical picture — a `contain` fit
+   * scaled by (sx, sy) is the same rectangle as a box of that size filled — but
+   * a transformed `<video>` is disqualified from the platform's hardware video
+   * overlay, so every decoded frame has to be uploaded and composited as a
+   * texture instead of being scanned out directly. On an Intel MacBook Pro that
+   * alone is the difference between theater dropping frames and fullscreen (no
+   * transform, see the early return) running clean.
+   *
+   * The box is measured off the *wrap*, never off the video: the video's own
+   * size is now an output of this function, so reading it back would wind the
+   * stretch up on every call.
    */
   function applyTheaterFit() {
+    const s = video.style
     if (!isTheater) {
-      video.style.transform = ''
+      s.transform = ''
+      s.flex = ''
+      s.width = s.height = s.marginTop = s.marginBottom = s.objectFit = ''
+      lastFitSig = ''
       return
     }
-    const fit = theaterFit(
-      video.clientWidth,
-      video.clientHeight,
-      video.videoWidth,
-      video.videoHeight,
-      fitLimits,
-    )
-    video.style.transform = fitTransform(fit)
+    const videoWrap = video.parentElement
+    if (!videoWrap) return
+
+    // What the flex column leaves the video: the wrap minus the strip below it.
+    // The controls are absolutely positioned in theater, so they take no height.
+    const boxW = videoWrap.clientWidth
+    const boxH = videoWrap.clientHeight - bxWrap.offsetHeight
+    const fit = theaterFit(boxW, boxH, video.videoWidth, video.videoHeight, fitLimits)
     reportFit(fit)
+
+    // Unmeasurable yet — no metadata, or a box that has not been laid out.
+    // Handing the element back to the stylesheet's `flex: 1 1 0` + `contain` is
+    // the right picture for a video whose dimensions are not known, and it is
+    // also the state this started in, so nothing flashes.
+    const contain = Math.min(boxW / video.videoWidth, boxH / video.videoHeight)
+    if (!Number.isFinite(contain) || contain <= 0) {
+      s.flex = ''
+      s.width = s.height = s.marginTop = s.marginBottom = s.objectFit = ''
+      lastFitSig = ''
+      return
+    }
+
+    // The `contain` fit the stylesheet would have drawn, scaled out to the fit.
+    // At identity this is exactly what `object-fit: contain` produces, so the
+    // sizing is unconditional and the element box is always the picture box.
+    const picW = Math.round(video.videoWidth * contain * fit.scaleX)
+    const picH = Math.round(video.videoHeight * contain * fit.scaleY)
+    // Margins carry the centering AND keep the element's outer height equal to
+    // `boxH`, so the strip below never moves — including when zoom overflows the
+    // box and the margins go negative (the wrap clips the overhang).
+    //
+    // Whole pixels, with the bottom margin taking the remainder, so the three
+    // sum to `boxH` EXACTLY. Rounding them independently leaves a sub-pixel
+    // residue that squeezes the strip below, which resizes `bxWrap`, which
+    // re-runs this from the ResizeObserver against a box a hair smaller than
+    // last time — an oscillation that locks the tab up.
+    const marginTop = Math.round((boxH - picH) / 2)
+    const marginBottom = boxH - picH - marginTop
+    // Writing the same geometry again would dirty layout for nothing, and this
+    // runs from a ResizeObserver — a no-op write is how a feedback loop starts.
+    const sig = `${picW}/${picH}/${marginTop}/${marginBottom}`
+    if (sig === lastFitSig) return
+    lastFitSig = sig
+
+    // `flex` inline rather than in the stylesheet: the CSS rule has to keep
+    // `flex: 1 1 0` as its no-JS floor (see globals.css), so the override that
+    // stops flex fighting the height below belongs here.
+    s.flex = '0 0 auto'
+    s.width = `${picW}px`
+    s.height = `${picH}px`
+    s.marginTop = `${marginTop}px`
+    s.marginBottom = `${marginBottom}px`
+    s.objectFit = 'fill'
   }
 
   // ── Canvas rendering ────────────────────────────────────────────────────────
@@ -761,12 +829,24 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     }
     lastRafTime = rafTime
 
-    const t = isSeeking ? smoothTime : video.currentTime || 0
-    const dur = video.duration || totalFrames / FPS
-    const pct = dur > 0 ? (t / dur) * 100 : 0
-    progressFill.style.width = `${pct}%`
-    progressThumb.style.left = `${pct}%`
-    timeDisplay.textContent = `${framesToTimecode(Math.floor(t * FPS))} / ${framesToTimecode(totalFrames)}`
+    // Immersive modes keep the bar off screen most of the time, and writing a
+    // width, a left and a timecode into it every frame dirtied style on a
+    // subtree nobody was looking at. `showControls` repaints it on the way back
+    // up, so nothing is stale by the time it is visible.
+    if (controlsVisible || !isImmersive()) {
+      const t = isSeeking ? smoothTime : video.currentTime || 0
+      const dur = video.duration || totalFrames / FPS
+      const pct = dur > 0 ? (t / dur) * 100 : 0
+      progressFill.style.width = `${pct}%`
+      progressThumb.style.left = `${pct}%`
+      // Timecode resolution is one second; at 60fps the other 59 writes were
+      // rebuilding the identical string.
+      const secs = Math.floor(t)
+      if (secs !== lastTimecodeSecs) {
+        lastTimecodeSecs = secs
+        timeDisplay.textContent = `${framesToTimecode(Math.floor(t * FPS))} / ${framesToTimecode(totalFrames)}`
+      }
+    }
 
     drawBounceX()
     if (needsContinuousFrame()) scheduleFrame()
@@ -1110,12 +1190,19 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
    * the moment it leaves.
    */
   function showControls(sticky = false) {
-    const container = byId<HTMLElement>('playerContainer')
-    const controls = container.querySelector('.player-controls')
-    container.classList.add('controls-visible')
-    if (controls) controls.classList.add('controls-visible')
-    anchorOverlay()
     if (hideControlsTimer) clearTimeout(hideControlsTimer)
+    // Theater re-runs this on every mousemove inside the bottom strip. Once the
+    // bar is already up there is nothing to write, and the class churn was
+    // dirtying style at trackpad event rates (100+/sec).
+    if (!controlsVisible) {
+      controlsVisible = true
+      playerContainer.classList.add('controls-visible')
+      controlsBar?.classList.add('controls-visible')
+      anchorOverlay()
+      // The bar carries the progress fill and the timecode, which the RAF loop
+      // stops writing while it is down — so it needs one catch-up paint.
+      scheduleFrame()
+    }
     if (sticky) return
     hideControlsTimer = setTimeout(() => {
       if (isImmersive()) hideControls()
@@ -1127,10 +1214,11 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     // take the sliders with it. Every hide path funnels through here.
     if (isFitPopoverOpen()) return
     if (hideControlsTimer) clearTimeout(hideControlsTimer)
-    const container = byId<HTMLElement>('playerContainer')
-    const controls = container.querySelector('.player-controls')
-    container.classList.remove('controls-visible')
-    if (controls) controls.classList.remove('controls-visible')
+    if (!controlsVisible) return
+    controlsVisible = false
+    controlsBarH = 0
+    playerContainer.classList.remove('controls-visible')
+    controlsBar?.classList.remove('controls-visible')
     anchorOverlay()
   }
 
@@ -1150,18 +1238,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
    * moving onto the bar it just revealed would dismiss it.
    */
   function theaterControlsZone(): number {
-    const container = byId<HTMLElement>('playerContainer')
-    if (!container.classList.contains('controls-visible')) {
-      return THEATER_EDGE_ZONE
+    if (!controlsVisible) return THEATER_EDGE_ZONE
+    // Measured once per raise, not per mousemove: `getBoundingClientRect` forces
+    // layout, and this used to run on every pointer event with the bar up.
+    if (controlsBarH === 0 && controlsBar) {
+      controlsBarH = Math.round(controlsBar.getBoundingClientRect().height)
     }
-    const controls = container.querySelector('.player-controls')
-    const barH = controls ? controls.getBoundingClientRect().height : 0
-    return Math.max(THEATER_EDGE_ZONE, Math.round(barH))
+    return Math.max(THEATER_EDGE_ZONE, controlsBarH)
   }
 
   function onEnterFullscreen() {
-    const container = byId<HTMLElement>('playerContainer')
-    container.classList.add('fullscreen-active')
+    playerContainer.classList.add('fullscreen-active')
     // Double-rAF: first frame browser applies fullscreen UA styles;
     // second frame layout is stable and getBoundingClientRect is reliable.
     requestAnimationFrame(() =>
@@ -1173,10 +1260,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
 
   function onExitFullscreen() {
-    const container = byId<HTMLElement>('playerContainer')
-    container.classList.remove('fullscreen-active', 'controls-visible')
-    const controls = container.querySelector('.player-controls')
-    if (controls) controls.classList.remove('controls-visible')
+    playerContainer.classList.remove('fullscreen-active', 'controls-visible')
+    controlsBar?.classList.remove('controls-visible')
+    controlsVisible = false
     if (hideControlsTimer) clearTimeout(hideControlsTimer)
     bxWrap.style.bottom = ''
     resizeCanvas()
@@ -1396,17 +1482,25 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   )
 
   // ── ResizeObserver + start loop ─────────────────────────────────────────────
-  // The strip drives the canvas; the video's own box drives the theater fit.
-  // Watching the video is what catches the second-order changes — the strip
-  // growing takes height off the picture, and the drawer opening takes width —
-  // without either having to know about the other.
+  // The strip drives the canvas; the wrap's box drives the theater fit. Between
+  // them they catch the second-order changes — the strip growing takes height
+  // off the picture, the drawer opening takes width — without either having to
+  // know about the other.
+  //
+  // The wrap and NOT the video: `applyTheaterFit` sets the video's own
+  // width/height, so observing the video would feed its output straight back in
+  // as an input. Nothing here resizes the wrap.
   const resizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
-      entry.target === video ? applyTheaterFit() : resizeCanvas()
+      // A taller strip is height off the picture, so the strip's own resize has
+      // to refit as well — the wrap is pinned to the viewport in theater and
+      // will not fire for it.
+      if (entry.target === bxWrap) resizeCanvas()
+      applyTheaterFit()
     }
   })
   resizeObserver.observe(bxWrap)
-  resizeObserver.observe(video)
+  if (video.parentElement) resizeObserver.observe(video.parentElement)
   resizeCanvas()
   scheduleFrame()
 
@@ -1440,11 +1534,16 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       } else {
         activePeaks = []
       }
+      // `totalFrames` is the duration half of the timecode string.
+      lastTimecodeSecs = -1
       scheduleFrame()
     },
     resetSmoothTime() {
       smoothTime = 0
       lastRafTime = null
+      // A new track changes the duration half of the timecode, so the
+      // same-second skip must not suppress the first write.
+      lastTimecodeSecs = -1
       scheduleFrame()
     },
     // Callers reach for this after swapping a track in; the picture has to be
