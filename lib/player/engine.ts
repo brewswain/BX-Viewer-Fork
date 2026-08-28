@@ -973,15 +973,37 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   on(btnPlay, 'click', togglePlay)
   on(video, 'click', togglePlay)
 
-  on(video, 'play', () => {
-    playIcon.innerHTML = PAUSE_GLYPH
+  /**
+   * The icon is derived from `video.paused`, never from which event fired.
+   * `loadTrack` swaps `video.src` under a live engine, and the media load
+   * algorithm sets `paused` there with no `pause` event of its own, so handlers
+   * that each hardcode one face leave the button showing the previous track's
+   * state. Every event below is only a hint to re-read the element; as with the
+   * frame loop, `timeupdate` is the backstop that heals a missed one.
+   */
+  function syncPlayIcon() {
+    if (!playIcon) return
+    playIcon.innerHTML = video.paused ? PLAY_GLYPH : PAUSE_GLYPH
     playIcon.setAttribute('fill', 'currentColor')
-  })
-  on(video, 'pause', () => {
-    playIcon.innerHTML = PLAY_GLYPH
-  })
+  }
+  for (const evt of [
+    'play',
+    'playing',
+    'pause',
+    'ended',
+    'emptied',
+    'loadstart',
+    'canplay',
+    'seeked',
+    'waiting',
+    'stalled',
+    'timeupdate',
+  ]) {
+    on(video, evt, syncPlayIcon)
+  }
+  syncPlayIcon()
+
   on(video, 'ended', () => {
-    playIcon.innerHTML = PLAY_GLYPH
     if (onEnded) onEnded()
   })
 
