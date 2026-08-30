@@ -1021,6 +1021,114 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     video.currentTime = Math.min(video.duration || 0, video.currentTime + 5)
   })
 
+  // ── Frame stepping ──────────────────────────────────────────────────────────
+  /**
+   * A video element exposes no frame rate, so stepping one frame means
+   * measuring one first. `requestVideoFrameCallback` fires once per presented
+   * frame with that frame's exact presentation time; the *smallest* gap between
+   * consecutive presentations is the frame duration. Taking the minimum rather
+   * than an average is deliberate: a dropped frame (the Intel MacBook's failure
+   * mode) only ever widens a gap, so it can pull an average down to a
+   * plausible-looking wrong rate but can never fake a gap that is too short.
+   *
+   * Firefox has no rVFC, and neither does a track that has never been played,
+   * so 30fps is the standing fallback: the step is then approximate, but ← / →
+   * still move by something frame-sized instead of doing nothing.
+   */
+  const FALLBACK_FPS = 30
+  const COMMON_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 90, 120]
+  /** Seeks land mid-frame, never on a PTS boundary; see `stepFrame`. */
+  const FRAME_EPSILON = 1e-4
+  const MIN_FRAME_SAMPLES = 12
+
+  type VideoFrameMeta = { mediaTime: number; presentedFrames: number }
+  type FrameCallbackVideo = HTMLVideoElement & {
+    requestVideoFrameCallback?: (
+      cb: (now: number, meta: VideoFrameMeta) => void,
+    ) => number
+    cancelVideoFrameCallback?: (handle: number) => void
+  }
+  const frameVideo = video as FrameCallbackVideo
+
+  let detectedFps = 0
+  let minFrameDelta = 0
+  let frameSampleCount = 0
+  let lastPresentedTime = -1
+  let frameCallbackId = 0
+
+  /** Measurement is within a percent or so; real rates are a short list. */
+  function snapFps(measured: number): number {
+    let best = measured
+    let bestErr = 0.03
+    for (const candidate of COMMON_FPS) {
+      const err = Math.abs(candidate - measured) / candidate
+      if (err < bestErr) {
+        bestErr = err
+        best = candidate
+      }
+    }
+    return best
+  }
+
+  function onPresentedFrame(_now: number, meta: VideoFrameMeta) {
+    frameCallbackId = 0
+    // Only real-time playback measures anything: a seek presents one frame out
+    // of nowhere, and a rate change scales media time against wall time.
+    if (!video.paused && !video.ended && video.playbackRate === 1) {
+      if (lastPresentedTime >= 0) {
+        const delta = meta.mediaTime - lastPresentedTime
+        // Above 1ms discards a repeat presentation of the same frame; below
+        // half a second discards the jump either side of a stall.
+        if (delta > 0.001 && delta < 0.5) {
+          if (!minFrameDelta || delta < minFrameDelta) minFrameDelta = delta
+          frameSampleCount++
+          if (frameSampleCount >= MIN_FRAME_SAMPLES)
+            detectedFps = snapFps(1 / minFrameDelta)
+        }
+      }
+      lastPresentedTime = meta.mediaTime
+    } else {
+      lastPresentedTime = -1
+    }
+    requestFrameSample()
+  }
+
+  function requestFrameSample() {
+    if (destroyed || frameCallbackId || !frameVideo.requestVideoFrameCallback)
+      return
+    frameCallbackId = frameVideo.requestVideoFrameCallback(onPresentedFrame)
+  }
+  requestFrameSample()
+
+  // A new source is a new frame rate; the old measurement would be a lie.
+  on(video, 'loadstart', () => {
+    detectedFps = 0
+    minFrameDelta = 0
+    frameSampleCount = 0
+    lastPresentedTime = -1
+    requestFrameSample()
+  })
+
+  /**
+   * Step exactly one frame. The target is offset by a hair so it lands *inside*
+   * the neighbouring frame rather than on the boundary between the two: seeking
+   * to an exact presentation timestamp is a coin flip once float error is in
+   * play, and losing that flip re-presents the frame already on screen, which
+   * reads as a dead key.
+   */
+  function stepFrame(direction: 1 | -1) {
+    const frameDur = 1 / (detectedFps || FALLBACK_FPS)
+    // Stepping is a paused-only idea, so a step out of playback pauses first,
+    // same as the transport's own tap, hence the flash to explain the stop.
+    if (!video.paused) {
+      video.pause()
+      flashTapIndicator(false)
+    }
+    const target = video.currentTime + direction * frameDur + FRAME_EPSILON
+    const end = Number.isFinite(video.duration) ? video.duration : target
+    video.currentTime = Math.min(end, Math.max(0, target))
+  }
+
   /**
    * Transport, volume and track keys. Every one of these has a button too —
    * these exist because the player is used full-screen, where the buttons are
@@ -1040,10 +1148,22 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       e.preventDefault()
       togglePlay()
     }
-    if (e.code === 'ArrowLeft')
-      video.currentTime = Math.max(0, video.currentTime - 5)
-    if (e.code === 'ArrowRight')
-      video.currentTime = Math.min(video.duration || 0, video.currentTime + 5)
+    // Shift turns the seek keys into frame steps. Nothing else claims
+    // Shift+←/→ over a video (the browser's own binding there is caret
+    // selection, which needs a caret), and it keeps the two scrub sizes on the
+    // same pair of keys instead of inventing a second pair.
+    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+      const direction = e.code === 'ArrowRight' ? 1 : -1
+      if (e.shiftKey) {
+        e.preventDefault()
+        stepFrame(direction)
+      } else {
+        const target = Math.max(0, video.currentTime + direction * 5)
+        video.currentTime = Number.isFinite(video.duration)
+          ? Math.min(video.duration, target)
+          : target
+      }
+    }
     // The arrows would scroll the page out from under the player otherwise.
     if (e.code === 'ArrowUp') {
       e.preventDefault()
@@ -1588,6 +1708,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     destroy() {
       destroyed = true
       cancelAnimationFrame(rafId)
+      if (frameCallbackId) frameVideo.cancelVideoFrameCallback?.(frameCallbackId)
       resizeObserver.disconnect()
       if (seekingLongTimer) clearTimeout(seekingLongTimer)
       if (hideControlsTimer) clearTimeout(hideControlsTimer)
