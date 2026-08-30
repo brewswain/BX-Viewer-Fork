@@ -31,6 +31,12 @@ export type Settings = {
   defaultZoom: number
   defaultPathSpeed: number
   /**
+   * Volume a freshly opened video starts at, 0–1. Only the starting point: the
+   * slider/keys write the live level to sessionStorage, and that wins for the
+   * rest of the session so a playlist does not reset itself between tracks.
+   */
+  defaultVolume: number
+  /**
    * Starting theater-fit caps. Flat and prefixed for the same reason the device
    * keys are: `getSettings` merges one level deep, so a nested object would not
    * pick up new keys for existing installs. The in-player popover overrides
@@ -85,6 +91,9 @@ export const DEFAULTS: Settings = {
   defaultTheater: true,
   defaultZoom: 0.25,
   defaultPathSpeed: 1.0,
+  // Half volume rather than the element's 1.0: opening a video at full blast is
+  // the worse of the two surprises.
+  defaultVolume: 0.5,
   theaterMaxStretch: MAX_STRETCH,
   theaterMaxZoom: MAX_ZOOM,
   effectsColorEnabled: true,

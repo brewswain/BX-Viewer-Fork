@@ -284,13 +284,20 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   }
   applyPathHidden()
 
-  // ── Volume: restore persisted state ────────────────────────────────────────
+  // ── Volume: restore persisted state, else fall back to the saved default ───
+  // The session value wins so tuning the level mid-playlist survives the track
+  // change; the setting only decides where a fresh session starts.
   const savedVolume = sessionStorage.getItem('playerVolume')
   const savedMuted = sessionStorage.getItem('playerMuted')
-  if (savedVolume !== null) {
-    video.volume = parseFloat(savedVolume)
-    volumeSlider.value = savedVolume
-  }
+  const defaultVolume =
+    typeof userSettings.defaultVolume === 'number' &&
+    userSettings.defaultVolume >= 0 &&
+    userSettings.defaultVolume <= 1
+      ? userSettings.defaultVolume
+      : 0.5
+  const startVolume = savedVolume !== null ? parseFloat(savedVolume) : defaultVolume
+  video.volume = startVolume
+  volumeSlider.value = String(startVolume)
   if (savedMuted !== null) {
     video.muted = savedMuted === 'true'
     if (video.muted) volumeSlider.value = '0'

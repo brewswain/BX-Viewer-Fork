@@ -39,6 +39,7 @@ type FormState = {
   /** Kept as strings — these mirror the raw <input> values, as the DOM did. */
   defaultZoom: string
   defaultPathSpeed: string
+  defaultVolume: string
   theaterMaxStretch: string
   theaterMaxZoom: string
   effectsColorEnabled: boolean
@@ -87,6 +88,7 @@ function toForm(s: Settings): FormState {
     defaultTheater: s.defaultTheater !== false,
     defaultZoom: String(s.defaultZoom),
     defaultPathSpeed: String(s.defaultPathSpeed),
+    defaultVolume: String(clamp01(s.defaultVolume)),
     theaterMaxStretch: String(clampStretch(s.theaterMaxStretch)),
     theaterMaxZoom: String(clampZoom(s.theaterMaxZoom)),
     effectsColorEnabled: s.effectsColorEnabled !== false,
@@ -159,6 +161,7 @@ export default function SettingsPage() {
       defaultTheater: form.defaultTheater,
       defaultZoom: parseFloat(form.defaultZoom),
       defaultPathSpeed: parseFloat(form.defaultPathSpeed),
+      defaultVolume: clamp01(num(form.defaultVolume, DEFAULTS.defaultVolume)),
       theaterMaxStretch: clampStretch(parseFloat(form.theaterMaxStretch)),
       theaterMaxZoom: clampZoom(parseFloat(form.theaterMaxZoom)),
       effectsColorEnabled: form.effectsColorEnabled,
@@ -423,6 +426,28 @@ export default function SettingsPage() {
                   {form.defaultPathSpeed}×
                 </span>
               </label>
+              <label className="settings-row settings-row-slider">
+                <span className="settings-label">Default volume</span>
+                <input
+                  type="range"
+                  id="defaultVolume"
+                  name="defaultVolume"
+                  className="settings-zoom-slider"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={form.defaultVolume}
+                  onChange={(e) => set('defaultVolume', e.target.value)}
+                />
+                <span className="settings-zoom-value" id="defaultVolumeValue">
+                  {Math.round(parseFloat(form.defaultVolume) * 100)}%
+                </span>
+              </label>
+              <p className="settings-hint">
+                Where a fresh session starts. Changing the volume in the player
+                sticks for the rest of that session, so this only applies to the
+                first video you open in a tab.
+              </p>
             </section>
 
             <section className="settings-section">
