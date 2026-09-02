@@ -880,17 +880,28 @@ body {
 
 .progress-bar-wrap {
   position: relative;
-  height: 4px;
+  height: 7px;
   background: var(--surface2);
-  border-radius: 2px;
+  border-radius: 3.5px;
   margin-bottom: 0.75rem;
   cursor: pointer;
+}
+
+/* The bar is a few pixels tall but has to be hovered accurately enough to aim a
+   frame preview, so the *hit* area is taller than the paint. It reaches down
+   into the existing 0.75rem margin and up only 5px, because above it is video
+   that toggles playback on click and should keep as much of itself as it can.
+   Horizontal geometry is untouched — the wrap's own rect still maps x to time. */
+.progress-bar-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -5px 0 -8px;
 }
 
 .progress-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--accent), var(--accent2));
-  border-radius: 2px;
+  border-radius: 3.5px;
   width: 0%;
   transition: width 0.1s linear;
   pointer-events: none;
@@ -900,14 +911,74 @@ body {
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: var(--accent);
   border-radius: 50%;
   left: 0%;
   pointer-events: none;
   box-shadow: 0 0 8px var(--accent-glow);
   transition: left 0.1s linear;
+}
+
+/* Hover readout: the timecode a click at the pointer would seek to. The engine
+   writes `left` in px, already clamped to the track's own width, and the
+   translate turns that into a centre — so the bubble never hangs off an end.
+   No `left` transition: it has to sit under the cursor, not chase it. */
+.progress-bar-tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s linear;
+}
+
+.progress-bar-wrap.seek-tooltip-visible .progress-bar-tooltip {
+  opacity: 1;
+}
+
+/* The frame itself. Collapsed until the engine has decoded one, so a bubble
+   that never gets a preview is exactly the timecode bubble it was before —
+   `display` rather than opacity, because a 0-height canvas must not leave the
+   card padded for a picture that is not coming. The engine sets the pixel size
+   on the element; only the padding above it belongs to the layout.
+   `--surface2` shows through while a frame is in flight, which reads as the
+   thumbnail loading rather than as the bubble breaking. */
+.progress-bar-tooltip-thumb {
+  display: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--surface2);
+}
+
+.progress-bar-tooltip.has-thumb {
+  padding: 0.25rem 0.25rem 0.2rem;
+}
+
+.progress-bar-tooltip.has-thumb .progress-bar-tooltip-thumb {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-tooltip {
+    transition: none;
+  }
 }
 
 .controls-row {
@@ -2134,13 +2205,18 @@ body::after {
 
   /* Taller progress bar — easier to scrub with a thumb */
   .progress-bar-wrap {
-    height: 6px;
+    height: 10px;
+    border-radius: 5px;
     margin-bottom: 0.65rem;
   }
 
+  .progress-bar-fill {
+    border-radius: 5px;
+  }
+
   .progress-bar-thumb {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
 
   .controls-row {

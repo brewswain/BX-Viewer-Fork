@@ -27,11 +27,22 @@ import {
 } from './constants'
 import {
   buildColors,
-  framesToTimecode,
   getEffectFadeAlpha,
   getEffectiveColorRgb,
   hexToRgbArr,
 } from './format'
+import {
+  completePreviewSeek,
+  idlePreviewSeek,
+  previewThumbBox,
+  requestPreviewSeek,
+  type PreviewSeekState,
+} from './seekPreview'
+import {
+  clampTooltipCenter,
+  formatSeekTime,
+  formatTimeDisplay,
+} from './seekTooltip'
 import {
   clampStretch,
   clampZoom,
@@ -182,6 +193,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const fitHint = byId<HTMLElement>('theaterFitHint')
   const btnFitReset = byId<HTMLButtonElement>('btnTheaterFitReset')
   const progressWrap = byId<HTMLElement>('progressWrap')
+  const seekTooltip = byId<HTMLElement>('progressTooltip')
+  const seekTooltipTime = byId<HTMLElement>('progressTooltipTime')
+  const seekTooltipThumb = byId<HTMLCanvasElement>('progressTooltipThumb')
   const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
   const speedSliderEl = byId<HTMLInputElement>('speedSlider')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
@@ -219,6 +233,31 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let wasPlayingBeforeSeek = false
   let seekingLongTimer: ReturnType<typeof setTimeout> | null = null
   let scrubbing = false
+  // Seek-bar hover readout. The bubble's width is only re-measured when its
+  // text changes or its thumbnail appears, because pointermove fires at
+  // trackpad rates and offsetWidth forces a layout every time it is read.
+  let tooltipVisible = false
+  let tooltipText = ''
+  let tooltipWidth = 0
+  // Last hover geometry, kept so the bubble can be re-clamped when a frame
+  // lands and changes its width — which happens well after the pointermove
+  // that asked for it.
+  let tooltipCenterPx = 0
+  let tooltipTrackW = 0
+  // Frame preview. The decoding element is built on first hover and lives as
+  // long as the track does; `previewFailed` latches so a video the browser
+  // will not open a second decoder for is asked once, not once per pointermove.
+  let previewVideo: HTMLVideoElement | null = null
+  let previewSrc = ''
+  let previewFailed = false
+  let previewCtx: CanvasRenderingContext2D | null = null
+  let previewSeek: PreviewSeekState = idlePreviewSeek()
+  let previewStallTimer: ReturnType<typeof setTimeout> | null = null
+  let thumbShown = false
+  let thumbW = 0
+  let thumbH = 0
+  let lastHoverSecs = 0
+  let lastMinDelta = 1
   let hideControlsTimer: ReturnType<typeof setTimeout> | null = null
   let cursorTimer: ReturnType<typeof setTimeout> | null = null
   // Mirrors the `controls-visible` class. Read every rAF (the loop skips writing
@@ -851,7 +890,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       const secs = Math.floor(t)
       if (secs !== lastTimecodeSecs) {
         lastTimecodeSecs = secs
-        timeDisplay.textContent = `${framesToTimecode(Math.floor(t * FPS))} / ${framesToTimecode(totalFrames)}`
+        // Formatted against `dur` — the video's own length, which is what the
+        // hover bubble measures too. The two readouts sit inches apart, so one
+        // reading 101:06 while the other reads 1:41:06 is worse than either.
+        timeDisplay.textContent = formatTimeDisplay(t, totalFrames / FPS, dur)
       }
     }
 
@@ -1324,6 +1366,279 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     scrubbing = false
   })
 
+  // ── Seek-bar hover readout ──────────────────────────────────────────────────
+  // Pointer events rather than mouse events so touch can be told apart: a
+  // finger covers the bar it is scrubbing, so the bubble would be both useless
+  // and in the way. Nothing here seeks or takes focus — it is display only, and
+  // it runs beside the handlers above without touching them.
+  function hideSeekTooltip() {
+    if (!tooltipVisible) return
+    tooltipVisible = false
+    progressWrap.classList.remove('seek-tooltip-visible')
+  }
+
+  // ── Frame preview ───────────────────────────────────────────────────────────
+  /** Box for the thumbnail. Big enough to recognise a shot in, still a bubble. */
+  const PREVIEW_MAX_W = 256
+  const PREVIEW_MAX_H = 160
+  /**
+   * …but never more than this much of the track it hangs over. On a phone the
+   * full box is most of the bar's width, and a preview you have to seek around
+   * is worse than a smaller one you can place.
+   */
+  const PREVIEW_MAX_TRACK_FRAC = 0.55
+  /** A frame that has not arrived in this long is not arriving. */
+  const PREVIEW_STALL_MS = 4000
+  /** A retina thumbnail is worth the pixels; a 3x one is not. */
+  const PREVIEW_MAX_DPR = 2
+
+  function clearPreviewStall() {
+    if (!previewStallTimer) return
+    clearTimeout(previewStallTimer)
+    previewStallTimer = null
+  }
+
+  /**
+   * Hand the position the coalescer picked to the element, and time it out.
+   * A null pick leaves any running watchdog alone: the commonest null is "this
+   * ask is queued behind a seek still in flight", and that seek is exactly the
+   * one the watchdog is there to rescue.
+   */
+  function drivePreviewSeek(seekTo: number | null) {
+    if (seekTo === null || !previewVideo) return
+    clearPreviewStall()
+    previewVideo.currentTime = seekTo
+    previewStallTimer = setTimeout(() => {
+      previewStallTimer = null
+      // Release the slot so the next hover is not queued behind a seek that
+      // never landed. `drew: false` keeps `drawn` on the frame really on
+      // screen, so the abandoned position can be asked for again.
+      const step = completePreviewSeek(previewSeek, lastMinDelta, false)
+      previewSeek = step.state
+      drivePreviewSeek(step.seekTo)
+    }, PREVIEW_STALL_MS)
+  }
+
+  function hidePreviewThumb() {
+    if (!thumbShown) return
+    thumbShown = false
+    seekTooltip.classList.remove('has-thumb')
+    tooltipWidth = 0
+    if (tooltipVisible) positionSeekTooltip()
+  }
+
+  function teardownPreview() {
+    clearPreviewStall()
+    if (previewVideo) {
+      previewVideo.removeEventListener('seeked', onPreviewSeeked)
+      previewVideo.removeEventListener('loadedmetadata', onPreviewMetadata)
+      previewVideo.removeEventListener('error', onPreviewError)
+      // Drops the decoder and cancels the range request in flight. Without it a
+      // playlist leaks one loading element per track it walks through.
+      previewVideo.removeAttribute('src')
+      previewVideo.load()
+      previewVideo = null
+    }
+    previewSrc = ''
+    previewCtx = null
+    previewSeek = idlePreviewSeek()
+    thumbW = 0
+    thumbH = 0
+    hidePreviewThumb()
+  }
+
+  function onPreviewError() {
+    // A container the browser will open once but not twice, or a range server
+    // that has stopped answering. Latch it: the bubble falls back to the bare
+    // timecode for this track rather than retrying on every pointermove.
+    previewFailed = true
+    clearPreviewStall()
+    previewSeek = idlePreviewSeek()
+    hidePreviewThumb()
+  }
+
+  /** Seeks set before metadata never report back, so the first ask waits here. */
+  function onPreviewMetadata() {
+    if (tooltipVisible && !scrubbing) requestPreviewFrame()
+  }
+
+  function onPreviewSeeked() {
+    clearPreviewStall()
+    drawPreviewFrame()
+    const step = completePreviewSeek(previewSeek, lastMinDelta)
+    previewSeek = step.state
+    drivePreviewSeek(step.seekTo)
+  }
+
+  /**
+   * The element frames are decoded out of, built on first hover and rebuilt
+   * whenever the track underneath changes.
+   *
+   * Deliberately never added to the document. An off-DOM video still loads,
+   * seeks and hands frames to `drawImage`, but it is not composited — so it
+   * cannot be the second video layer that costs the playing one its hardware
+   * overlay, which is the whole performance budget on the Intel MacBook.
+   */
+  function ensurePreviewVideo(): HTMLVideoElement | null {
+    const src = video.currentSrc || video.src
+    if (!src) return null
+    if (src === previewSrc) return previewFailed ? null : previewVideo
+    teardownPreview()
+    previewSrc = src
+    previewFailed = false
+    const pv = document.createElement('video')
+    // `metadata`, not `auto`: the preview wants the few ranges it seeks into,
+    // not a second copy of a file the main element is already streaming.
+    pv.preload = 'metadata'
+    pv.muted = true
+    pv.playsInline = true
+    pv.addEventListener('seeked', onPreviewSeeked)
+    pv.addEventListener('loadedmetadata', onPreviewMetadata)
+    pv.addEventListener('error', onPreviewError)
+    pv.src = src
+    previewVideo = pv
+    return pv
+  }
+
+  function drawPreviewFrame() {
+    const pv = previewVideo
+    if (!pv) return
+    // `tooltipTrackW` is whatever the last hover measured, so a window resize
+    // re-caps the box on the next frame drawn rather than needing its own
+    // listener. Zero only before the first hover, which cannot reach here.
+    const maxW =
+      tooltipTrackW > 0
+        ? Math.min(PREVIEW_MAX_W, tooltipTrackW * PREVIEW_MAX_TRACK_FRAC)
+        : PREVIEW_MAX_W
+    const box = previewThumbBox(
+      pv.videoWidth,
+      pv.videoHeight,
+      maxW,
+      PREVIEW_MAX_H,
+    )
+    if (box.width !== thumbW || box.height !== thumbH) {
+      thumbW = box.width
+      thumbH = box.height
+      const dpr = Math.min(PREVIEW_MAX_DPR, window.devicePixelRatio || 1)
+      seekTooltipThumb.width = Math.round(box.width * dpr)
+      seekTooltipThumb.height = Math.round(box.height * dpr)
+      seekTooltipThumb.style.width = `${box.width}px`
+      seekTooltipThumb.style.height = `${box.height}px`
+      tooltipWidth = 0
+    }
+    // Resizing a canvas clears it but keeps the context, so this is fetched
+    // once per track and survives an aspect change mid-playlist.
+    if (!previewCtx) previewCtx = seekTooltipThumb.getContext('2d')
+    if (!previewCtx) return
+    previewCtx.drawImage(
+      pv,
+      0,
+      0,
+      seekTooltipThumb.width,
+      seekTooltipThumb.height,
+    )
+    // Only open the card once there is a real frame in it: `seeked` can land
+    // on metadata alone, and drawImage from that state is a silent no-op that
+    // would otherwise leave an empty grey box under the timecode for good.
+    if (!thumbShown && pv.videoWidth > 0) {
+      thumbShown = true
+      seekTooltip.classList.add('has-thumb')
+      tooltipWidth = 0
+    }
+    if (tooltipVisible) positionSeekTooltip()
+  }
+
+  /** Ask for the frame under the pointer, at the granularity of one track pixel. */
+  function requestPreviewFrame() {
+    const pv = ensurePreviewVideo()
+    // HAVE_NOTHING: `currentTime` here only sets a start position and reports
+    // no `seeked`, so the ask is deferred to `loadedmetadata` instead.
+    if (!pv || pv.readyState < 1) return
+    const step = requestPreviewSeek(previewSeek, lastHoverSecs, lastMinDelta)
+    previewSeek = step.state
+    drivePreviewSeek(step.seekTo)
+  }
+
+  cleanups.push(teardownPreview)
+
+  /**
+   * Re-clamp the bubble against the geometry of the last pointermove. Split out
+   * because a frame landing changes the card's width long after the move that
+   * asked for it, and a bubble that was flush with the end of the track has to
+   * be pulled back in when it grows. `tooltipWidth === 0` means "stale, measure
+   * again" — the one place offsetWidth is read, so the layout it forces is paid
+   * only when the card has actually changed shape.
+   */
+  function positionSeekTooltip() {
+    if (tooltipTrackW <= 0) return
+    if (tooltipWidth === 0) tooltipWidth = seekTooltip.offsetWidth
+    seekTooltip.style.left = `${clampTooltipCenter(tooltipCenterPx, tooltipWidth, tooltipTrackW)}px`
+  }
+
+  function updateSeekTooltip(clientX: number) {
+    const dur = video.duration
+    if (!Number.isFinite(dur) || dur <= 0) return hideSeekTooltip()
+    const rect = progressWrap.getBoundingClientRect()
+    if (rect.width <= 0) return
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const secs = pct * dur
+
+    const label = formatSeekTime(secs, dur)
+    if (label !== tooltipText) {
+      seekTooltipTime.textContent = label
+      tooltipText = label
+      tooltipWidth = 0
+    }
+    tooltipCenterPx = pct * rect.width
+    tooltipTrackW = rect.width
+    positionSeekTooltip()
+
+    // One track pixel of video: the smallest move that can put a different
+    // frame in the bubble, and so the cheapest useful seek granularity.
+    lastHoverSecs = secs
+    lastMinDelta = dur / rect.width
+    // Mid-drag the main video is already seeking to this very frame, in a
+    // window far bigger than the bubble. A second decoder chasing it would only
+    // fight it for the disk, so the last preview drawn just stays put.
+    if (!scrubbing) requestPreviewFrame()
+
+    if (!tooltipVisible) {
+      tooltipVisible = true
+      progressWrap.classList.add('seek-tooltip-visible')
+    }
+  }
+
+  /** A finger gets no bubble; a mouse or a pen does. */
+  function isHoverPointer(e: PointerEvent): boolean {
+    return e.pointerType !== 'touch'
+  }
+
+  on(progressWrap, 'pointerenter', (e: PointerEvent) => {
+    if (isHoverPointer(e)) updateSeekTooltip(e.clientX)
+  })
+  on(progressWrap, 'pointermove', (e: PointerEvent) => {
+    if (isHoverPointer(e)) updateSeekTooltip(e.clientX)
+  })
+  on(progressWrap, 'pointerleave', () => {
+    // A drag that has wandered off a 4px-tall bar is still a drag.
+    if (!scrubbing) hideSeekTooltip()
+  })
+  on(document, 'pointermove', (e: PointerEvent) => {
+    if (scrubbing && isHoverPointer(e)) updateSeekTooltip(e.clientX)
+  })
+  on(document, 'pointerup', (e: PointerEvent) => {
+    // `scrubbing` is still true here — pointerup precedes the mouseup that
+    // clears it — so ask the geometry instead of the flag.
+    if (!tooltipVisible || !isHoverPointer(e)) return
+    const r = progressWrap.getBoundingClientRect()
+    const inside =
+      e.clientX >= r.left &&
+      e.clientX <= r.right &&
+      e.clientY >= r.top &&
+      e.clientY <= r.bottom
+    if (!inside) hideSeekTooltip()
+  })
+
   // ── Fullscreen ──────────────────────────────────────────────────────────────
   function anchorOverlay() {
     bxWrap.style.bottom = ''
@@ -1368,6 +1683,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     controlsBarH = 0
     playerContainer.classList.remove('controls-visible')
     controlsBar?.classList.remove('controls-visible')
+    // The bar can go down under the pointer (a keyboard fullscreen toggle),
+    // which leaves no pointerleave to hide the bubble with.
+    hideSeekTooltip()
     anchorOverlay()
   }
 

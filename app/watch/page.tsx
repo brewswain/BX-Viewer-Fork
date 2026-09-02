@@ -41,6 +41,7 @@ import {
   framesToTimecode,
   renderDescription,
 } from '@/lib/player/format'
+import { formatSeekTime } from '@/lib/player/seekTooltip'
 import type { BxSource, Marker, VideoMeta } from '@/lib/player/types'
 import type { OssmItem } from '@/lib/ossm/types'
 import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
@@ -512,8 +513,13 @@ function WatchInner() {
         bxSources[activeIdx].peaks || [],
       )
 
+      // Same clock as the control bar's total and the seek bubble: this stat
+      // sits on screen beside both, so `101:06` next to `1:41:06` would read as
+      // a broken player rather than as two formats. Scale is the video's own
+      // length, so it is fixed for the session and cannot flip mid-playback.
+      const realSecs = realFrames / FPS
       setStats({
-        duration: framesToTimecode(realFrames),
+        duration: formatSeekTime(realSecs, realSecs),
         frames: realFrames.toLocaleString(),
       })
     }

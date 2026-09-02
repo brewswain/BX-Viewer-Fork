@@ -95,6 +95,27 @@ function PlayerControls({
       <div className="progress-bar-wrap" id="progressWrap">
         <div className="progress-bar-fill" id="progressFill"></div>
         <div className="progress-bar-thumb" id="progressThumb"></div>
+        {/* Hover readout: the frame a click would land on, over its timecode.
+            The engine writes the text, the canvas and the left offset, and adds
+            `has-thumb` once a frame has actually been decoded — until then the
+            canvas stays collapsed and the bubble is the timecode alone, which
+            is also where it stays for a video the browser will not preview.
+            aria-hidden because it only restates what #timeDisplay already says
+            and it exists for the pointer, which a screen reader has not got. */}
+        <div
+          className="progress-bar-tooltip"
+          id="progressTooltip"
+          aria-hidden="true"
+        >
+          <canvas
+            className="progress-bar-tooltip-thumb"
+            id="progressTooltipThumb"
+          ></canvas>
+          <span
+            className="progress-bar-tooltip-time"
+            id="progressTooltipTime"
+          ></span>
+        </div>
       </div>
 
       {/* Primary row: transport + time + fullscreen */}
