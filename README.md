@@ -60,7 +60,7 @@ This program was written with generative AI, with human intervention as well. I 
 
 `ffprobe` on your `PATH` is optional but recommended. It fills in a video's duration when `meta.json` doesn't declare one; without it those entries just show an unknown duration.
 
-**Python is no longer required.** If you followed the original project's instructions before, you can ignore anything about installing Python 3 or creating a `venv` — the original's Python servers are gone and nothing in the app uses them. The optional `Tools/splitbx.py` helper is the sole exception; see [Tools](#tools).
+**Python is no longer required.** If you followed the original project's instructions before, you can ignore anything about installing Python 3 or creating a `venv` — the original's Python servers are gone and nothing in the app uses them. The optional `Tools/splitbx.py` and `Tools/funscript2bx.py` helpers are the sole exceptions; see [Tools](#tools).
 
 ## Getting Started
 
@@ -209,11 +209,12 @@ The manager page validates every folder and reports missing video files, missing
 
 ## Tools
 
-Two optional helpers for preparing packages. Neither is part of the app, and you never need them just to run it.
+Three optional helpers for preparing packages. None is part of the app, and you never need them just to run it.
 
 | Script | What it does | Needs |
 |---|---|---|
 | `Tools/splitbx.py` | Splits one `.bx` file into several at the given frame counts — for carving a volume-length path up into per-song files. `python Tools/splitbx.py input.bx 13370 10725 9803 --output-prefix video` | Python 3 |
+| `Tools/funscript2bx.py` | Converts a `.funscript` into a `.bx` path. `python Tools/funscript2bx.py input.funscript -o output.bx`. Funscript stores no easing, so every marker gets one curve — the default `--trans linear` reproduces funscript playback exactly, while `--trans sine --ease inout` feels closer to a hand-made path. | Python 3 |
 | `Tools/offset.sh` | Adds black frames to, or trims frames from, the start of a video, so an existing path lines up. Interactive; detects the framerate itself. | bash, ffmpeg |
 
 There is also `bun run sim`, a fake Buttplug server that prints every move it is
