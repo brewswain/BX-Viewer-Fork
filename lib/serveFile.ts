@@ -78,17 +78,47 @@ export async function serveFile(filePath: string, request: Request): Promise<Res
 
   const size = stat.size
   const type = contentTypeFor(filePath)
+  /**
+   * Size + mtime is enough to tell one version of a path from the next, which
+   * is all a validator has to do here: the manager replaces files wholesale,
+   * it never edits one in place at a fixed length.
+   */
+  const etag = `"${size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`
+  const lastModified = stat.mtime.toUTCString()
   const base: Record<string, string> = {
     'Content-Type': type,
     'Accept-Ranges': 'bytes',
-    'Cache-Control': 'no-store',
-    'Last-Modified': stat.mtime.toUTCString(),
+    /**
+     * `no-cache` means "revalidate before reuse", not "do not store", and the
+     * distinction matters a lot for video. Under `no-store` a browser may keep
+     * nothing, so every byte it re-reads (a backwards seek, a block its media
+     * cache evicted) has to come off the network again. On a multi-GB file
+     * that is what exhausts Firefox's fixed-size media cache; see
+     * `PLAYBACK-TUNING.md`.
+     */
+    'Cache-Control': 'no-cache',
+    ETag: etag,
+    'Last-Modified': lastModified,
   }
 
   const rangeHeader = request.headers.get('range')
   const isHead = request.method === 'HEAD'
 
-  if (rangeHeader) {
+  // The revalidation `no-cache` asks for, answered without resending the body.
+  if (!rangeHeader && request.headers.get('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers: base })
+  }
+
+  /**
+   * A byte range only composes with the representation it was measured
+   * against. If the file changed under a partially fetched stream, serving the
+   * range anyway lets the client stitch two versions into one file, so a stale
+   * `If-Range` falls back to sending it whole.
+   */
+  const ifRange = request.headers.get('if-range')
+  const rangeUsable = !ifRange || ifRange === etag || ifRange === lastModified
+
+  if (rangeHeader && rangeUsable) {
     const range = parseRange(rangeHeader, size)
     if (!range) {
       return new Response(null, {
