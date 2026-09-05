@@ -32,6 +32,14 @@ import {
   hexToRgbArr,
 } from './format'
 import {
+  NORMAL_PLAYBACK_RATE,
+  clampRate,
+  formatRate,
+  rateAt,
+  rateIndex,
+  stepRate,
+} from './playbackRate'
+import {
   completePreviewSeek,
   idlePreviewSeek,
   previewThumbBox,
@@ -198,6 +206,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const seekTooltipThumb = byId<HTMLCanvasElement>('progressTooltipThumb')
   const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
   const speedSliderEl = byId<HTMLInputElement>('speedSlider')
+  // Carries a ladder index, not a rate — see `./playbackRate`.
+  const rateSliderEl = byId<HTMLInputElement>('playbackRateSlider')
+  const rateValueEl = byId<HTMLElement>('playbackRateValue')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
   const pathBtn = byId<HTMLButtonElement>('pathBtn')
   // Theater playlist drawer — both null outside the playlist page.
@@ -229,6 +240,12 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   // The .bx stays loaded and `onFrame` keeps reporting, so device output and
   // the OSSM export are unaffected by it.
   let pathHidden = false
+  /**
+   * The rate the user asked for, held separately from `video.playbackRate`
+   * because the element loses it: swapping `src` re-runs the media load
+   * algorithm, which resets the live rate. This is what it gets put back to.
+   */
+  let liveRate = NORMAL_PLAYBACK_RATE
   let isSeeking = false
   let wasPlayingBeforeSeek = false
   let seekingLongTimer: ReturnType<typeof setTimeout> | null = null
@@ -862,7 +879,11 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (!isSeeking) {
       if (!video.paused && !video.ended) {
         if (lastRafTime !== null) {
-          const delta = (rafTime - lastRafTime) / 1000
+          // Scaled by the rate: this integrates *media* time from wall time, so
+          // at 2× a 16 ms frame has advanced the video 32 ms. Without it the
+          // ball lags the picture and the 0.1 s guard below thrashes, snapping
+          // it back several times a second.
+          const delta = ((rafTime - lastRafTime) / 1000) * video.playbackRate
           smoothTime += delta
           if (Math.abs(smoothTime - video.currentTime) > 0.1)
             smoothTime = video.currentTime
@@ -1216,6 +1237,12 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       setVolume(video.volume - 0.05)
     }
     if (key === 'm' && !e.shiftKey) toggleMute()
+    // mpv's bindings, and the only bracket keys the player wants. Matched on
+    // `e.key` rather than `key`, so the shifted `{` / `}` fall through instead
+    // of stepping the rate on their way somewhere else.
+    if (e.key === '[') setPlaybackRate(stepRate(liveRate, -1))
+    if (e.key === ']') setPlaybackRate(stepRate(liveRate, 1))
+    if (e.key === '\\') setPlaybackRate(NORMAL_PLAYBACK_RATE)
     // Shift+F is the fit popover, and it is theater's to handle.
     if (key === 'f' && !e.shiftKey) toggleFullscreen()
     if (key === 'n' && e.shiftKey && btnNextTrack) btnNextTrack.click()
@@ -1324,6 +1351,50 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       volIcon.innerHTML = `<polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M15.54,8.46a5,5,0,0,1,0,7.07"/><path d="M19.07,4.93a10,10,0,0,1,0,14.14"/>`
     }
   }
+
+  // ── Playback rate ───────────────────────────────────────────────────────────
+  // Same session/default split as volume: the live rate follows a playlist from
+  // track to track so changing speed mid-list is not undone by the next track,
+  // and the setting only decides where a fresh tab starts. Nothing here writes
+  // back to settings — "what this video needs" and "what every video should
+  // start at" are different questions, and the settings page owns the second.
+
+  /**
+   * Push a rate onto the element and the control, without persisting it.
+   * `unknown` because both seeds are: a settings key an older install has never
+   * written, and a `parseFloat` of whatever is in sessionStorage.
+   */
+  function applyRate(rate: unknown) {
+    liveRate = clampRate(rate)
+    // Both: `playbackRate` is the live one, `defaultPlaybackRate` is what the
+    // element resets to when a new `src` is loaded. Setting only the first
+    // drops a playlist back to 1× on its second track.
+    video.defaultPlaybackRate = liveRate
+    if (video.playbackRate !== liveRate) video.playbackRate = liveRate
+    rateSliderEl.value = String(rateIndex(liveRate))
+    rateValueEl.textContent = formatRate(liveRate)
+  }
+
+  function setPlaybackRate(rate: number) {
+    applyRate(rate)
+    sessionStorage.setItem('playerRate', String(liveRate))
+  }
+
+  const savedRate = sessionStorage.getItem('playerRate')
+  applyRate(
+    savedRate !== null ? parseFloat(savedRate) : userSettings.defaultPlaybackRate,
+  )
+
+  on(rateSliderEl, 'input', () =>
+    setPlaybackRate(rateAt(parseFloat(rateSliderEl.value))),
+  )
+
+  // The reset above is spec'd behaviour, but a browser that skipped it would
+  // leave the control and the element disagreeing with no way back. Cheap to
+  // rule out, and it also catches a rate changed from outside the engine.
+  on(video, 'loadedmetadata', () => {
+    if (video.playbackRate !== liveRate) applyRate(liveRate)
+  })
 
   // ── Progress bar scrubbing ──────────────────────────────────────────────────
   function seekTo(clientX: number) {

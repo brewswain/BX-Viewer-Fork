@@ -158,9 +158,17 @@ export class StrokeDriver {
    *                 not seeking, not stalled. The caller owns this because the
    *                 engine's `paused` state lies during a scrub: it pauses on
    *                 `seeking` and resumes on `seeked`.
+   * @param rate     `video.playbackRate`. The plan is entirely in media time,
+   *                 but a device move is given a *wall-clock* duration, so at
+   *                 2× a 400 ms segment has to be commanded as a 200 ms move or
+   *                 the machine falls a stroke behind per stroke. Everything
+   *                 that crosses that boundary is divided by this.
    */
-  tick(videoMs: number, active: boolean): void {
+  tick(videoMs: number, active: boolean, rate = 1): void {
     if (!this.running || !this.backend) return
+    // A rate of 0 is not a thing a media element reports while advancing, but
+    // it would divide the whole schedule into infinities if it ever were.
+    const speed = Number.isFinite(rate) && rate > 0 ? rate : 1
 
     if (!active) {
       // Hold position. `stopped` makes this a no-op after the first frame.
@@ -179,9 +187,12 @@ export class StrokeDriver {
 
     // A jump — or the first frame after resuming — re-anchors the index rather
     // than replaying the commands in between.
+    // The threshold is a wall-clock idea — "more than a person could have
+    // watched between two frames" — so it scales with the rate too, or 4×
+    // playback on a slow frame would read as a seek and re-anchor for nothing.
     const jumped =
       this.lastPlanMs === null ||
-      Math.abs(planMs - this.lastPlanMs) > this.opts.seekThresholdMs
+      Math.abs(planMs - this.lastPlanMs) > this.opts.seekThresholdMs * speed
     if (jumped) {
       if (this.lastPlanMs !== null) this.stats.seeks++
       this.idx = seekIndex(cmds, planMs)
@@ -203,7 +214,7 @@ export class StrokeDriver {
       // Shorten by however late we are, so the move still lands on schedule.
       // The floor keeps a badly-late command from becoming a slam.
       const late = planMs - cmd.t
-      this.send(cmd.pos, Math.max(MIN_MOVE_MS, cmd.dur - late))
+      this.send(cmd.pos, Math.max(MIN_MOVE_MS, (cmd.dur - late) / speed))
       return
     }
 
@@ -213,8 +224,11 @@ export class StrokeDriver {
     // Only worth doing if there's room before the next command — otherwise the
     // move would be cancelled almost immediately, and cramming it into the gap
     // would turn a cosmetic correction into a slam.
+    // `budget` starts as plan time — the gap before the next command — and is
+    // converted to wall time, because that is what it is being spent on and
+    // what `MIN_ANCHOR_MS` and `seekSettleMs` are both measured in.
     const next = cmds[this.idx]
-    const budget = next ? next.t - planMs : this.opts.seekSettleMs
+    const budget = next ? (next.t - planMs) / speed : this.opts.seekSettleMs
     if (budget < MIN_ANCHOR_MS) return
     this.send(
       depthAt(this.plan.segments, planMs),

@@ -4,6 +4,12 @@ import { memo, type ReactNode } from 'react'
 
 import { DEFAULT_OVERLAY_BG_OPACITY } from '@/lib/player/constants'
 import type { LoopMode, PlaylistLoopMode } from '@/lib/player/playback'
+import {
+  NORMAL_PLAYBACK_RATE,
+  RATE_RANGE,
+  formatRate,
+  rateIndex,
+} from '@/lib/player/playbackRate'
 import { STRETCH_RANGE, ZOOM_RANGE } from '@/lib/player/theaterFit'
 
 /**
@@ -392,7 +398,7 @@ function PlayerControls({
             step="0.05"
             defaultValue={String(DEFAULT_OVERLAY_BG_OPACITY)}
           />
-          <span className="overlay-bg-opacity-value" id="overlayBgOpacityValue">
+          <span className="slider-value" id="overlayBgOpacityValue">
             45%
           </span>
         </div>
@@ -410,8 +416,14 @@ function PlayerControls({
           />
         </div>
 
-        <div className="volume-wrap zoom-wrap">
-          <span style={SLIDER_LABEL_STYLE}>speed</span>
+        {/* "path speed" in full, not "speed": it scales how fast the waveform
+            scrolls and never touches the video, which is the opposite of what a
+            bare `speed` next to a video reads as. */}
+        <div
+          className="volume-wrap zoom-wrap"
+          title="How fast the BounceX path scrolls past the playhead — this is not playback speed"
+        >
+          <span style={SLIDER_LABEL_STYLE}>path speed</span>
           <input
             type="range"
             className="zoom-slider"
@@ -421,6 +433,29 @@ function PlayerControls({
             step="0.25"
             defaultValue="1.0"
           />
+        </div>
+
+        {/* Indexes the rate ladder rather than carrying a rate — see
+            `lib/player/playbackRate.ts`. The engine writes both the position
+            and the readout once the settings are read. */}
+        <div
+          className="volume-wrap zoom-wrap"
+          title="Playback speed ([ slower, ] faster, \ back to 1×)"
+        >
+          <span style={SLIDER_LABEL_STYLE}>speed</span>
+          <input
+            type="range"
+            className="zoom-slider"
+            id="playbackRateSlider"
+            min={RATE_RANGE.min}
+            max={RATE_RANGE.max}
+            step={RATE_RANGE.step}
+            defaultValue={rateIndex(NORMAL_PLAYBACK_RATE)}
+            aria-label="Playback speed"
+          />
+          <span className="slider-value" id="playbackRateValue">
+            {formatRate(NORMAL_PLAYBACK_RATE)}
+          </span>
         </div>
 
         <div className="volume-wrap">

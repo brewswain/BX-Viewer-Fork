@@ -2745,7 +2745,9 @@ body.theater-mode .ctrl-btn.theater-only {
 
 /* Fixed width so dragging the slider does not shuffle the row left and right
    as the readout goes 5% → 100%. */
-.overlay-bg-opacity-value {
+/* Readout for an inline slider in the secondary row. Fixed width so the row
+   does not shuffle sideways as the number changes width under a drag. */
+.slider-value {
   font-family: var(--mono);
   font-size: 0.68rem;
   color: var(--text3);

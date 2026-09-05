@@ -266,4 +266,81 @@ describe('StrokeDriver', () => {
     for (let t = 12000; t <= 14000; t += 16) driver.tick(t, true)
     expect(backend.moves).toHaveLength(0)
   })
+
+  // The whole plan is in media time and every duration handed to a device is in
+  // wall time. At 1× those are the same number, which is exactly why getting
+  // this wrong is invisible until someone changes speed — and then the machine
+  // runs a whole stroke behind while still looking like it is working.
+  describe('playback rate', () => {
+    test('a due command is commanded in wall time, not plan time', () => {
+      // The first stroke spans 500 ms of video. At 2× it goes past in 250 ms of
+      // real time, so that is how long the device has to complete it.
+      driver.tick(0, true, 2)
+      expect(backend.moves[0].dur).toBeCloseTo(250, 3)
+
+      backend.reset()
+      driver.setPlan(squarePlan())
+      driver.tick(0, true, 0.5)
+      expect(backend.moves[0].dur).toBeCloseTo(1000, 3)
+    })
+
+    test('an omitted rate still means 1×', () => {
+      driver.tick(0, true)
+      expect(backend.moves[0].dur).toBeCloseTo(500, 3)
+    })
+
+    test('lateness is taken off before the conversion, not after', () => {
+      driver.tick(0, true, 2)
+      backend.reset()
+      // Two 300 ms steps: each is under the scaled seek threshold, so the
+      // second lands 100 ms past the 500 ms command rather than re-anchoring.
+      // 400 ms of video is left to cover, which at 2× is 200 ms of real time.
+      driver.tick(300, true, 2)
+      driver.tick(600, true, 2)
+      expect(backend.moves).toHaveLength(1)
+      expect(backend.moves[0].dur).toBeCloseTo(200, 3)
+    })
+
+    test('the minimum move length is still a floor at speed', () => {
+      for (let t = 0; t < 8000; t += 240) driver.tick(t, true, 4)
+      for (const mv of backend.moves) expect(mv.dur).toBeGreaterThanOrEqual(20)
+    })
+
+    test('the seek threshold scales, so fast playback is not read as a seek', () => {
+      driver.tick(0, true, 4)
+      backend.reset()
+      // 400 ms of video in one frame is over the 250 ms threshold but is only
+      // 100 ms of real time at 4× — falling behind, not scrubbing.
+      driver.tick(400, true, 4)
+      expect(driver.stats.seeks).toBe(0)
+      // The same jump at 1× is a scrub.
+      driver.setPlan(squarePlan())
+      driver.tick(0, true)
+      driver.tick(400, true)
+      expect(driver.stats.seeks).toBe(1)
+    })
+
+    test('the post-seek anchor is budgeted in wall time', () => {
+      // 300 ms of video before the next command. At 1× that is room enough for
+      // a correction; at 4× it is 75 ms of real time, under the 80 ms floor, so
+      // the correction would be cancelled before it landed.
+      driver.tick(200, true)
+      expect(backend.moves).toHaveLength(1)
+
+      backend.reset()
+      driver.setPlan(squarePlan())
+      driver.tick(200, true, 4)
+      expect(backend.moves).toHaveLength(0)
+    })
+
+    test('a nonsense rate is treated as 1× rather than dividing by it', () => {
+      driver.tick(0, true, 0)
+      expect(backend.moves[0].dur).toBeCloseTo(500, 3)
+
+      backend.reset()
+      driver.setPlan(squarePlan())
+      driver.tick(0, true, NaN)
+      expect(backend.moves[0].dur).toBeCloseTo(500, 3)
+    })
+  })
 })

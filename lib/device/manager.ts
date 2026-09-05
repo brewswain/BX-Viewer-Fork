@@ -270,9 +270,11 @@ class DeviceManager {
    *                `curFrame` converted, which is already smoothed and already
    *                has the video's own path offset applied.
    * @param active  whether the video is genuinely advancing.
+   * @param rate    `video.playbackRate`, so move durations come out in wall
+   *                time rather than in the plan's media time.
    */
-  tick(planMs: number, active: boolean): void {
-    this.driver.tick(planMs, active)
+  tick(planMs: number, active: boolean, rate = 1): void {
+    this.driver.tick(planMs, active, rate)
   }
 
   /** Live counters for the diagnostics panel. Read, never subscribed. */

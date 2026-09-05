@@ -278,6 +278,7 @@ function PlaylistInner() {
         deviceManager.tick(
           (curFrame / FPS) * 1000,
           !video!.paused && !video!.ended && video!.readyState >= 2,
+          video!.playbackRate,
         )
       },
     })

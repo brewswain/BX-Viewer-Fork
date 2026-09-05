@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react'
 import SiteHeader from '@/components/SiteHeader'
 import { deviceManager } from '@/lib/device/manager'
 import {
+  RATE_RANGE,
+  clampRate,
+  formatRate,
+  rateAt,
+  rateIndex,
+} from '@/lib/player/playbackRate'
+import {
   STRETCH_RANGE,
   ZOOM_RANGE,
   clampStretch,
@@ -39,6 +46,7 @@ type FormState = {
   /** Kept as strings — these mirror the raw <input> values, as the DOM did. */
   defaultZoom: string
   defaultPathSpeed: string
+  defaultPlaybackRate: string
   defaultVolume: string
   theaterMaxStretch: string
   theaterMaxZoom: string
@@ -88,6 +96,7 @@ function toForm(s: Settings): FormState {
     defaultTheater: s.defaultTheater !== false,
     defaultZoom: String(s.defaultZoom),
     defaultPathSpeed: String(s.defaultPathSpeed),
+    defaultPlaybackRate: String(clampRate(s.defaultPlaybackRate)),
     defaultVolume: String(clamp01(s.defaultVolume)),
     theaterMaxStretch: String(clampStretch(s.theaterMaxStretch)),
     theaterMaxZoom: String(clampZoom(s.theaterMaxZoom)),
@@ -161,6 +170,7 @@ export default function SettingsPage() {
       defaultTheater: form.defaultTheater,
       defaultZoom: parseFloat(form.defaultZoom),
       defaultPathSpeed: parseFloat(form.defaultPathSpeed),
+      defaultPlaybackRate: clampRate(parseFloat(form.defaultPlaybackRate)),
       defaultVolume: clamp01(num(form.defaultVolume, DEFAULTS.defaultVolume)),
       theaterMaxStretch: clampStretch(parseFloat(form.theaterMaxStretch)),
       theaterMaxZoom: clampZoom(parseFloat(form.theaterMaxZoom)),
@@ -424,6 +434,28 @@ export default function SettingsPage() {
                 />
                 <span className="settings-zoom-value" id="defaultPathSpeedValue">
                   {form.defaultPathSpeed}×
+                </span>
+              </label>
+              {/* The slider carries a ladder index, not a rate — the offered
+                  speeds are unevenly spaced on purpose, so a linear track
+                  cannot express them. See `lib/player/playbackRate.ts`. */}
+              <label className="settings-row settings-row-slider">
+                <span className="settings-label">Default playback speed</span>
+                <input
+                  type="range"
+                  id="defaultPlaybackRate"
+                  name="defaultPlaybackRate"
+                  className="settings-zoom-slider"
+                  min={RATE_RANGE.min}
+                  max={RATE_RANGE.max}
+                  step={RATE_RANGE.step}
+                  value={rateIndex(parseFloat(form.defaultPlaybackRate))}
+                  onChange={(e) =>
+                    set('defaultPlaybackRate', String(rateAt(Number(e.target.value))))
+                  }
+                />
+                <span className="settings-zoom-value" id="defaultPlaybackRateValue">
+                  {formatRate(clampRate(parseFloat(form.defaultPlaybackRate)))}
                 </span>
               </label>
               <label className="settings-row settings-row-slider">

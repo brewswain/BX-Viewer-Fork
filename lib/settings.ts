@@ -5,6 +5,7 @@
  */
 
 import { DEFAULT_OVERLAY_BG_OPACITY } from './player/constants'
+import { NORMAL_PLAYBACK_RATE } from './player/playbackRate'
 import { MAX_STRETCH, MAX_ZOOM } from './player/theaterFit'
 
 export const BX_SETTINGS_KEY = 'bx_viewer_settings'
@@ -29,7 +30,15 @@ export type Settings = {
   /** Opt-out: videos open in theater mode unless this is explicitly false. */
   defaultTheater: boolean
   defaultZoom: number
+  /** How fast the waveform scrolls. Nothing to do with `defaultPlaybackRate`. */
   defaultPathSpeed: number
+  /**
+   * Speed a freshly opened video plays at. Same session/default split as
+   * `defaultVolume`: the in-player slider writes the live rate to
+   * sessionStorage and that wins until the tab closes, so changing speed
+   * mid-playlist survives the track change.
+   */
+  defaultPlaybackRate: number
   /**
    * Volume a freshly opened video starts at, 0–1. Only the starting point: the
    * slider/keys write the live level to sessionStorage, and that wins for the
@@ -91,6 +100,7 @@ export const DEFAULTS: Settings = {
   defaultTheater: true,
   defaultZoom: 0.25,
   defaultPathSpeed: 1.0,
+  defaultPlaybackRate: NORMAL_PLAYBACK_RATE,
   // Half volume rather than the element's 1.0: opening a video at full blast is
   // the worse of the two surprises.
   defaultVolume: 0.5,

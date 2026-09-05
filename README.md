@@ -30,7 +30,8 @@ This program was written with generative AI, with human intervention as well. I 
 - 📏 Path Size Control: Adjust path thickness to your preference!
 - 📦 Easy Imports: Just drag in a .zip file to add new videos!
 - 📱 Cross-Device Access: Watch on any device (including mobile!) on your local network!
-- 🏃 Path Speed Adjustment: Want to slow it down or speed it up? Go ahead!
+- 🏃 Path Speed Adjustment: Want the waveform to scroll slower or faster? Go ahead!
+- ⏩ Playback Speed: 0.25× up to 4×, on a slider in the control bar or on `[` / `]`, with `\` back to 1×. Audio keeps its pitch, and device output follows the rate. The starting speed is a setting; changing it while watching lasts the session.
 - 🪄 Effects: Able to render special effects from paths created with [BX-Editor-FX](https://github.com/Alunacoz/BX-Editor-FX)! Editing them by hand — text overlays, custom fonts, timed cue sequences — is covered in [docs/bx2-text-effects.md](docs/bx2-text-effects.md).
 - 🎸 DH Mode: Don't like waveforms? Automatically (but not perfectly!) convert .bx paths into simple circles in the settings!
 - 🕹️ Device Output: Drive an OSSM — or any Buttplug device with positional control — straight from the `.bx` path, in sync with the video. Connects through [Intiface Central](https://intiface.com/central/) or to [OSSM Sauce](https://github.com/clbhundley/OSSM-Sauce) directly. See [docs/device-output.md](docs/device-output.md).
@@ -115,7 +116,7 @@ To use a different port, change `httpPort` and restart.
 | `/` | Browse — grid of all videos and playlists |
 | `/watch?v=<id>` | Player for a single video (`<id>` is the folder name under `videos/`) |
 | `/playlist?p=<id>` | Playlist view (`<id>` is the folder name under `playlists/`) |
-| `/settings` | Path colors, size, speed, DH mode, Y-flip, overlay options |
+| `/settings` | Path colors, size, path/playback speed, DH mode, Y-flip, overlay options |
 | `/about` | About page and links |
 | `/manager` | Import, delete, reorder, and edit metadata for videos and playlists |
 
