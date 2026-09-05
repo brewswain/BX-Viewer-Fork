@@ -2,11 +2,43 @@
  * Frame previews for the seek bar — the thumbnail half of the hover bubble
  * whose clock lives in `seekTooltip.ts`.
  *
- * Only the two decisions worth pinning down are here, both pure: when a hover
- * position is worth a seek at all, and the box a frame is drawn into. The
- * decoding itself stays in the engine, which owns the off-DOM `<video>` the
- * frames come out of.
+ * Only the decisions worth pinning down are here, all pure: whether a file is
+ * worth a preview element at all, when a hover position is worth a seek, and
+ * the box a frame is drawn into. The decoding itself stays in the engine, which
+ * owns the off-DOM `<video>` the frames come out of.
  */
+
+/**
+ * Above this long, a hover thumbnail is not worth a second reader of the file.
+ * See `previewWorthBuilding`.
+ */
+export const PREVIEW_MAX_DURATION_SECS = 20 * 60
+
+/**
+ * Whether this video can afford a second element decoding frames out of it.
+ *
+ * Firefox keeps ONE media cache for the whole content process (500 MiB by
+ * default, 8 GB on a machine tuned per `PLAYBACK-TUNING.md`), and the high
+ * readahead limit that tuning prescribes is an instruction to every element to
+ * pull its whole file into it. At the library's ~10 Mbps a 90-minute carrier is
+ * about 6.7 GB, so two elements on one of those ask for more than the cache
+ * holds. It fills, no block is evictable because a reader still needs it, and
+ * then BOTH elements wedge for good, the playing one included. Measured on
+ * `longform-machine-session-eight` 2026-09-05: the page's video fell from
+ * readyState 4 to 0 the moment a second element opened the same src, and only a
+ * full page load cleared it; a client-side nav does not.
+ *
+ * Twenty minutes is ~1.5 GB, so a pair of those still fits with room over, and
+ * nothing in the library sits near the line: the clips run to minutes and the
+ * longform carriers to 80-103. A duration that is not a number yet cannot be
+ * ruled a clip, and the cost of guessing wrong is the whole tab, so it is
+ * refused until the element reports one. The bubble keeps its timecode either
+ * way; it is only the picture in it that a long carrier gives up.
+ */
+export function previewWorthBuilding(durationSecs: number): boolean {
+  if (!Number.isFinite(durationSecs) || durationSecs <= 0) return false
+  return durationSecs <= PREVIEW_MAX_DURATION_SECS
+}
 
 /**
  * One preview seek at a time.

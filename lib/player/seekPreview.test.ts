@@ -4,11 +4,32 @@ import {
   completePreviewSeek,
   idlePreviewSeek,
   previewThumbBox,
+  previewWorthBuilding,
   requestPreviewSeek,
 } from './seekPreview'
 
 /** One track pixel of a 100-minute video, the gap the engine actually passes. */
 const MIN_DELTA = 10
+
+describe('previewWorthBuilding', () => {
+  test('builds for an ordinary clip', () => {
+    expect(previewWorthBuilding(37)).toBe(true)
+    expect(previewWorthBuilding(8 * 60)).toBe(true)
+  })
+
+  test('refuses the longform carriers, which is the whole point of it', () => {
+    // Session eight: 5408.21 s, 8.14 GB. A second element on this one wedged
+    // every media element in the tab on 2026-09-05.
+    expect(previewWorthBuilding(5408.21)).toBe(false)
+    expect(previewWorthBuilding(103 * 60)).toBe(false)
+  })
+
+  test('refuses a duration it does not have yet rather than guessing', () => {
+    expect(previewWorthBuilding(NaN)).toBe(false)
+    expect(previewWorthBuilding(Infinity)).toBe(false)
+    expect(previewWorthBuilding(0)).toBe(false)
+  })
+})
 
 describe('requestPreviewSeek', () => {
   test('serves the first ask straight away', () => {

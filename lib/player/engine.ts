@@ -43,6 +43,7 @@ import {
   completePreviewSeek,
   idlePreviewSeek,
   previewThumbBox,
+  previewWorthBuilding,
   requestPreviewSeek,
   type PreviewSeekState,
 } from './seekPreview'
@@ -270,6 +271,11 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   let previewCtx: CanvasRenderingContext2D | null = null
   let previewSeek: PreviewSeekState = idlePreviewSeek()
   let previewStallTimer: ReturnType<typeof setTimeout> | null = null
+  // Retires the preview element once the pointer has left the bar. Without it
+  // the element is built on the first hover and holds its share of the media
+  // cache until the track changes, which on a long file is the rest of the
+  // session; see `PREVIEW_MAX_DURATION_SECS`.
+  let previewIdleTimer: ReturnType<typeof setTimeout> | null = null
   let thumbShown = false
   let thumbW = 0
   let thumbH = 0
@@ -1403,13 +1409,39 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     video.currentTime = pct * (video.duration || 0)
   }
 
+  /**
+   * A drag fires at pointer rates (100+/sec on a trackpad) and every write to
+   * `currentTime` abandons the range request in flight and opens another one.
+   * Across a multi-GB carrier that is a few hundred aborted reads for one drag,
+   * none of which can land. So the pointer is sampled instead: the newest
+   * position waiting is served once a frame, and the ones swept past are
+   * dropped, which is the same bargain `seekPreview.ts` already makes for the
+   * bubble. A click still seeks immediately; it is only the drag that queues.
+   */
+  let pendingSeekX: number | null = null
+  let seekRaf = 0
+  function seekSoon(clientX: number) {
+    pendingSeekX = clientX
+    if (seekRaf) return
+    seekRaf = requestAnimationFrame(() => {
+      seekRaf = 0
+      if (pendingSeekX !== null) seekTo(pendingSeekX)
+      pendingSeekX = null
+    })
+  }
+  cleanups.push(() => {
+    if (seekRaf) cancelAnimationFrame(seekRaf)
+    seekRaf = 0
+    pendingSeekX = null
+  })
+
   on(progressWrap, 'mousedown', (e: MouseEvent) => {
     scrubbing = true
     seekTo(e.clientX)
     scheduleFrame() // grabbing the thumb at the current position seeks nowhere
   })
   on(document, 'mousemove', (e: MouseEvent) => {
-    if (scrubbing) seekTo(e.clientX)
+    if (scrubbing) seekSoon(e.clientX)
   })
   on(document, 'mouseup', () => {
     scrubbing = false
@@ -1429,7 +1461,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     document,
     'touchmove',
     (e: TouchEvent) => {
-      if (scrubbing && e.touches.length) seekTo(e.touches[0].clientX)
+      if (scrubbing && e.touches.length) seekSoon(e.touches[0].clientX)
     },
     { passive: true },
   )
@@ -1446,6 +1478,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (!tooltipVisible) return
     tooltipVisible = false
     progressWrap.classList.remove('seek-tooltip-visible')
+    schedulePreviewTeardown()
   }
 
   // ── Frame preview ───────────────────────────────────────────────────────────
@@ -1460,6 +1493,12 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const PREVIEW_MAX_TRACK_FRAC = 0.55
   /** A frame that has not arrived in this long is not arriving. */
   const PREVIEW_STALL_MS = 4000
+  /**
+   * How long a preview element outlives the hover that built it. Long enough
+   * that sweeping off the bar and back does not pay for a rebuild, short enough
+   * that the blocks it is holding come back before they are missed.
+   */
+  const PREVIEW_IDLE_MS = 5000
   /** A retina thumbnail is worth the pixels; a 3x one is not. */
   const PREVIEW_MAX_DPR = 2
 
@@ -1498,8 +1537,30 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (tooltipVisible) positionSeekTooltip()
   }
 
+  function cancelPreviewTeardown() {
+    if (!previewIdleTimer) return
+    clearTimeout(previewIdleTimer)
+    previewIdleTimer = null
+  }
+
+  /**
+   * Hand the element's cache blocks back a few seconds after the bubble goes.
+   * Scheduled from `hideSeekTooltip`, which every hide path funnels through, so
+   * a pointer leaving the bar and a bar going down under it are both covered.
+   */
+  function schedulePreviewTeardown() {
+    if (!previewVideo || previewIdleTimer) return
+    previewIdleTimer = setTimeout(() => {
+      previewIdleTimer = null
+      // A drag that left the bar still owns the element it is drawing into.
+      if (tooltipVisible || scrubbing) return
+      teardownPreview()
+    }, PREVIEW_IDLE_MS)
+  }
+
   function teardownPreview() {
     clearPreviewStall()
+    cancelPreviewTeardown()
     if (previewVideo) {
       previewVideo.removeEventListener('seeked', onPreviewSeeked)
       previewVideo.removeEventListener('loadedmetadata', onPreviewMetadata)
@@ -1553,6 +1614,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   function ensurePreviewVideo(): HTMLVideoElement | null {
     const src = video.currentSrc || video.src
     if (!src) return null
+    // Re-checked per hover rather than latched, because the duration this reads
+    // arrives after the element does and a playlist can walk from a clip onto a
+    // carrier.
+    if (!previewWorthBuilding(video.duration)) return null
     if (src === previewSrc) return previewFailed ? null : previewVideo
     teardownPreview()
     previewSrc = src
@@ -1621,6 +1686,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   /** Ask for the frame under the pointer, at the granularity of one track pixel. */
   function requestPreviewFrame() {
+    cancelPreviewTeardown() // the pointer is back on the bar
     const pv = ensurePreviewVideo()
     // HAVE_NOTHING: `currentTime` here only sets a start position and reports
     // no `seeked`, so the ask is deferred to `loadedmetadata` instead.

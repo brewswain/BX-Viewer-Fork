@@ -59,7 +59,21 @@ function parseRange(header: string, size: number): { start: number; end: number 
   return { start, end }
 }
 
-function toWebStream(nodeStream: fs.ReadStream): ReadableStream<Uint8Array> {
+/**
+ * A seek abandons the request in flight, so on a scrubbed video these are
+ * cancelled far more often than they are read to the end. `Readable.toWeb`
+ * destroys the node stream when the *web* stream is cancelled, but nothing
+ * connects a client hanging up to that cancel, which leaves a read stream open
+ * on a multi-GB file per abandoned seek. `request.signal` is the connection
+ * between the two.
+ */
+function toWebStream(
+  nodeStream: fs.ReadStream,
+  signal: AbortSignal,
+): ReadableStream<Uint8Array> {
+  if (signal.aborted) nodeStream.destroy()
+  else
+    signal.addEventListener('abort', () => nodeStream.destroy(), { once: true })
   return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>
 }
 
@@ -134,13 +148,16 @@ export async function serveFile(filePath: string, request: Request): Promise<Res
       'Content-Length': String(length),
     }
     if (isHead) return new Response(null, { status: 206, headers })
-    return new Response(toWebStream(fs.createReadStream(filePath, { start, end })), {
-      status: 206,
-      headers,
-    })
+    return new Response(
+      toWebStream(fs.createReadStream(filePath, { start, end }), request.signal),
+      { status: 206, headers },
+    )
   }
 
   const headers = { ...base, 'Content-Length': String(size) }
   if (isHead) return new Response(null, { status: 200, headers })
-  return new Response(toWebStream(fs.createReadStream(filePath)), { status: 200, headers })
+  return new Response(toWebStream(fs.createReadStream(filePath), request.signal), {
+    status: 200,
+    headers,
+  })
 }
