@@ -25,54 +25,19 @@ import {
   saveQuickPlaylist,
 } from '@/lib/player/quickPlaylist'
 
-const VIDEO_BASE = '/videos'
-const PLAYLIST_BASE = '/playlists'
 const MANAGER_API = '/api/manager/version'
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-async function fetchJSON(url: string) {
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
-  return res.json()
-}
+const LIBRARY_API = '/api/library'
 
 /**
- * A section manifest, treating absence (404) as an empty library rather than an
- * error. Neither manifest ships with the repo — the manager writes one on the
- * first import — so a fresh install has no videos, not a broken page.
+ * Both manifests plus every meta.json, in one response. An absent manifest
+ * comes back as an empty list rather than an error: neither one ships with the
+ * repo (the manager writes them on the first import), so a fresh install has no
+ * videos rather than a broken page. A folder with no readable meta.json still
+ * appears, under the conventional file names the server synthesises.
  */
-async function fetchManifest(url: string): Promise<string[]> {
-  const res = await fetch(url, { cache: 'no-store' })
-  if (res.status === 404) return []
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
-  return res.json()
-}
-
-/**
- * Fetch a video's meta.json, returning a synthesised fallback if it is absent
- * (404) so that meta.json is not required for every video folder.
- */
-async function fetchVideoMeta(folder: string): Promise<VideoMeta> {
-  const url = `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`
-  try {
-    const res = await fetch(url, { cache: 'no-store' })
-    if (res.status === 404) return defaultMeta(folder)
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
-    return res.json()
-  } catch {
-    // Network error or parse failure — return safe default rather than
-    // crashing the entire browse page.
-    return defaultMeta(folder)
-  }
-}
-
-function defaultMeta(folder: string): VideoMeta {
-  return {
-    title: folder,
-    videoFile: `${folder}.mp4`,
-    bxFiles: [{ label: 'Default', file: `${folder}.bx` }],
-    // duration intentionally omitted — will be detected from the video element
-  }
+type LibraryResponse = {
+  videos: VideoMeta[]
+  playlists: PlaylistMeta[]
 }
 
 const FILTER_KEYS: FilterKey[] = [
@@ -130,45 +95,36 @@ function Browse() {
   }, [])
 
   // ── Boot ─────────────────────────────────────────────────────────────────
-  const loadVideos = useCallback(async () => {
+  /**
+   * One request for the whole library. This used to be a manifest fetch
+   * followed by one meta.json per entry, 81 requests across videos and
+   * playlists, and the manager poll below re-ran the lot on every save. The
+   * server does the same walk in about 16 ms and answers it whole; see
+   * `app/api/library/route.ts` for why it is not cached.
+   */
+  const loadLibrary = useCallback(async () => {
+    let payload: LibraryResponse
     try {
-      const manifest = await fetchManifest(`${VIDEO_BASE}/manifest.json`)
-      const metas = await Promise.all(
-        manifest.map((id) =>
-          fetchVideoMeta(id).then((m) => ({ ...m, _folder: id })),
-        ),
-      )
-      setVideos(metas)
-      setVideosError(null)
-      setVideosLoaded(true)
-      setLibraryVersion((n) => n + 1)
+      const res = await fetch(LIBRARY_API, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${LIBRARY_API}`)
+      payload = await res.json()
     } catch (e) {
       setVideosError(e instanceof Error ? e.message : String(e))
-    }
-  }, [])
-
-  const loadPlaylists = useCallback(async () => {
-    try {
-      const manifest = await fetchManifest(`${PLAYLIST_BASE}/manifest.json`)
-      const list: PlaylistMeta[] = await Promise.all(
-        manifest.map((id) =>
-          fetchJSON(`${PLAYLIST_BASE}/${encodeURIComponent(id)}/meta.json`).then(
-            (p) => ({ ...p, _id: id }),
-          ),
-        ),
-      )
-      setPlaylists(list)
-      setPlaylistsState('ok')
-    } catch {
       setPlaylists([])
       setPlaylistsState('error')
+      return
     }
+    setVideos(payload.videos || [])
+    setVideosError(null)
+    setVideosLoaded(true)
+    setLibraryVersion((n) => n + 1)
+    setPlaylists(payload.playlists || [])
+    setPlaylistsState('ok')
   }, [])
 
   const init = useCallback(() => {
-    void loadVideos()
-    void loadPlaylists()
-  }, [loadVideos, loadPlaylists])
+    void loadLibrary()
+  }, [loadLibrary])
 
   const initRef = useRef(init)
   initRef.current = init
@@ -181,6 +137,9 @@ function Browse() {
     let lastVersion: number | null = null
 
     async function poll() {
+      // A hidden tab cannot show a change, and the reload it would trigger is
+      // the most expensive thing on this page.
+      if (document.hidden) return
       try {
         const res = await fetch(MANAGER_API, { cache: 'no-store' })
         if (!res.ok) return
@@ -191,8 +150,7 @@ function Browse() {
         }
         if (version !== lastVersion) {
           lastVersion = version
-          await loadVideos()
-          await loadPlaylists()
+          await loadLibrary()
         }
       } catch {
         /* manager not running */
@@ -200,8 +158,16 @@ function Browse() {
     }
 
     const timer = setInterval(poll, 2000)
-    return () => clearInterval(timer)
-  }, [loadVideos, loadPlaylists])
+    // Catch up immediately on return rather than waiting out the interval.
+    const onVisible = () => {
+      if (!document.hidden) void poll()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [loadLibrary])
 
   // ── Grid filtering ───────────────────────────────────────────────────────
   const { videoType, difficulty, songQuantity, pathCreator, videoCreator, tags } =

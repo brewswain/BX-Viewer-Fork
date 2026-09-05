@@ -1420,9 +1420,20 @@ body {
 .marker-list {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  /* The row spacing is a margin on the rows rather than a gap here, because
+     only the rows near the scrollport are in the DOM (see `markerWindow.ts`)
+     and the two spacers standing in for the rest are sized as whole multiples
+     of one row's pitch. A gap would apply to the spacers too and put the
+     arithmetic half a row out at each edge. */
+  gap: 0;
   max-height: 340px;
   overflow-y: auto;
+}
+
+/* Sized in JS from the measured row pitch; `flex: none` so the column cannot
+   shrink them back and collapse the scroll range. */
+.marker-list-spacer {
+  flex: none;
 }
 
 .marker-list-item {
@@ -1430,6 +1441,7 @@ body {
   align-items: center;
   gap: 0.6rem;
   padding: 0.45rem 0.65rem;
+  margin-bottom: 0.35rem;
   background: var(--surface);
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -1437,6 +1449,7 @@ body {
     border-color 0.15s,
     background 0.15s;
   cursor: pointer;
+  flex: none;
   /* The list scrolls a few rows at a time but can hold thousands; skip
      rendering work for the ones outside the scrollport. The intrinsic size is
      the measured row height, so the scrollbar stays stable. */

@@ -36,6 +36,84 @@ export function secsToTimecode(secs: number): string {
   return `${mm}:${ss}`
 }
 
+/**
+ * Above this many bytes, a card's duration is not worth a second reader of the
+ * file. The player's `previewWorthBuilding` refuses on duration for the same
+ * reason (see `lib/player/seekPreview.ts`); a probe cannot use that test,
+ * because the duration is the thing it is asking for. File length is the bound
+ * it can get, and 1.5 GB is the same line in those units: about 20 minutes at
+ * the library's ~10 Mbps. A length that does not parse is refused rather than
+ * guessed, since the cost of guessing wrong is every media element in the tab
+ * wedged until a full page load.
+ */
+const PROBE_MAX_BYTES = 1536 * 1024 * 1024
+
+/** A probe that never reports must not hold the queue behind it forever. */
+const PROBE_TIMEOUT_MS = 15_000
+
+/**
+ * One duration probe in flight for the whole grid.
+ *
+ * Firefox's media cache is one budget per content process, so 72 cards probing
+ * in parallel is 72 readers against it however small each file is. The chain is
+ * module-level because that is the only scope that spans cards mounting and
+ * unmounting; a card that unmounted still takes its turn, finds its cancel flag
+ * set and returns without touching the network.
+ */
+let probeChain: Promise<unknown> = Promise.resolve()
+
+function queueProbe(job: () => Promise<void>) {
+  probeChain = probeChain.then(job, job)
+}
+
+/** Open a metadata-only element on `src` and read the duration back off it. */
+function readDurationSecs(src: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const probe = document.createElement('video')
+    probe.preload = 'metadata'
+    probe.muted = true
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const done = (secs: number | null) => {
+      if (timer) clearTimeout(timer)
+      probe.removeEventListener('loadedmetadata', onMetadata)
+      probe.removeEventListener('error', onError)
+      /**
+       * Drops the decoder and cancels the range request, the same teardown the
+       * engine's `teardownPreview` uses. `src = ''` resolves against the page
+       * URL, which sets the element loading the browse page's own HTML as
+       * media: a spurious request, a `MEDIA_ERR_SRC_NOT_SUPPORTED`, and no
+       * reliable release of the cache blocks it was holding.
+       */
+      probe.removeAttribute('src')
+      probe.load()
+      resolve(secs)
+    }
+    const onMetadata = () =>
+      done(Number.isFinite(probe.duration) && probe.duration > 0 ? probe.duration : null)
+    const onError = () => done(null)
+    probe.addEventListener('loadedmetadata', onMetadata, { once: true })
+    probe.addEventListener('error', onError, { once: true })
+    timer = setTimeout(() => done(null), PROBE_TIMEOUT_MS)
+    probe.src = src
+  })
+}
+
+/** `null` for anything the card cannot show is safe to open a second time. */
+async function probeDurationSecs(src: string): Promise<number | null> {
+  let length: number
+  try {
+    const head = await fetch(src, { method: 'HEAD' })
+    if (!head.ok) return null
+    length = Number(head.headers.get('content-length'))
+  } catch {
+    return null
+  }
+  // A missing or unparseable header reads as 0 here, which is refused with the
+  // oversized ones.
+  if (!Number.isFinite(length) || length <= 0 || length > PROBE_MAX_BYTES) return null
+  return readDurationSecs(src)
+}
+
 export function ThumbPlaceholder() {
   return (
     <div className="card-thumb-placeholder">
@@ -64,38 +142,21 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
   const [thumbFailed, setThumbFailed] = useState(false)
   const [probedTimecode, setProbedTimecode] = useState<string | null>(null)
 
-  // If duration wasn't in meta.json, probe the video file for it
+  // If duration wasn't in meta.json, probe the video file for it. The early
+  // return is what keeps the 71 cards that carry a duration from ever reaching
+  // the queue, let alone an element.
   useEffect(() => {
     if (timecode) return
     const videoFile = video.videoFile || `${folder}.mp4`
     const videoSrc = `/videos/${encodeURIComponent(folder)}/${encodeURIComponent(videoFile)}`
-    const probe = document.createElement('video')
-    probe.preload = 'metadata'
-    probe.muted = true
-    probe.style.display = 'none'
-    probe.addEventListener(
-      'loadedmetadata',
-      () => {
-        if (probe.duration && isFinite(probe.duration)) {
-          setProbedTimecode(secsToTimecode(probe.duration))
-        }
-        probe.src = ''
-        probe.remove()
-      },
-      { once: true },
-    )
-    probe.addEventListener(
-      'error',
-      () => {
-        probe.src = ''
-        probe.remove()
-      },
-      { once: true },
-    )
-    probe.src = videoSrc
+    let cancelled = false
+    queueProbe(async () => {
+      if (cancelled) return
+      const secs = await probeDurationSecs(videoSrc)
+      if (!cancelled && secs !== null) setProbedTimecode(secsToTimecode(secs))
+    })
     return () => {
-      probe.src = ''
-      probe.remove()
+      cancelled = true
     }
   }, [folder, timecode, video.videoFile])
 

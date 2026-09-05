@@ -11,7 +11,7 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import DevicePanel from '@/components/player/DevicePanel'
 import OssmExportPanel from '@/components/player/OssmExportPanel'
@@ -41,10 +41,14 @@ import {
   framesToTimecode,
   renderDescription,
 } from '@/lib/player/format'
+import { MARKER_ROW_PITCH, markerWindow } from '@/lib/player/markerWindow'
 import { formatSeekTime } from '@/lib/player/seekTooltip'
 import type { BxSource, Marker, VideoMeta } from '@/lib/player/types'
 import type { OssmItem } from '@/lib/ossm/types'
 import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
+
+/** Absolute, unlike `VIDEO_BASE`, because it is a route rather than a folder. */
+const LIBRARY_API = '/api/library'
 
 type Loaded = {
   id: string
@@ -104,6 +108,15 @@ function WatchInner() {
   const markerCursorRef = useRef(0)
   const bxIndexRef = useRef(0)
   const bxInitRef = useRef<Loaded | null>(null)
+
+  // ── Marker list windowing ───────────────────────────────────────────────────
+  // Only the rows near the scrollport go in the DOM. See `markerWindow.ts` for
+  // why: a longform path is 21k markers and the panel shows nine.
+  const markerListRef = useRef<HTMLDivElement | null>(null)
+  const markerScrollRaf = useRef(0)
+  const [markerScroll, setMarkerScroll] = useState(0)
+  const [markerViewH, setMarkerViewH] = useState(0)
+  const [markerPitch, setMarkerPitch] = useState(MARKER_ROW_PITCH)
 
   // ── Service Worker ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -230,6 +243,66 @@ function WatchInner() {
   useEffect(() => {
     lastHighlightedRef.current = -1
   }, [sidebarTab, activeBxIndex])
+
+  const markerSlice = markerWindow(
+    markerScroll,
+    markerViewH,
+    activeMarkers.length,
+    markerPitch,
+  )
+
+  /**
+   * Measure the scrollport and the real row pitch once the rows are up. The
+   * pitch is taken from two live rows rather than the CSS so a zoomed page or a
+   * changed root font size corrects itself; `offsetTop` includes the margin
+   * that stands in for the old flex gap, which is exactly the pitch the spacers
+   * are sized in.
+   */
+  useEffect(() => {
+    const list = markerListRef.current
+    if (!list || sidebarTab !== 'bx') return
+    const measure = () => {
+      setMarkerViewH(list.clientHeight)
+      const rows = list.querySelectorAll<HTMLElement>('.marker-list-item')
+      if (rows.length >= 2) {
+        const pitch = rows[1].offsetTop - rows[0].offsetTop
+        if (pitch > 0) setMarkerPitch(pitch)
+      }
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(list)
+    return () => ro.disconnect()
+  }, [sidebarTab, activeBxIndex, activeMarkers.length])
+
+  /**
+   * A row scrolled into view mounts without the class the per-frame scan put on
+   * its predecessor, so the highlight is re-stamped whenever the window moves.
+   * The scan itself only writes on a change of index and would not notice.
+   */
+  useEffect(() => {
+    const idx = lastHighlightedRef.current
+    if (idx < 0 || sidebarTab !== 'bx') return
+    const el = document.getElementById(`mli-${idx}`)
+    if (el) el.classList.add('current')
+  }, [markerSlice.start, markerSlice.end, sidebarTab])
+
+  // Scroll fires faster than frames on a trackpad, and the only thing that
+  // changes is which slice is mounted, so one recompute per frame is enough.
+  const onMarkerScroll = useCallback(() => {
+    if (markerScrollRaf.current) return
+    markerScrollRaf.current = requestAnimationFrame(() => {
+      markerScrollRaf.current = 0
+      setMarkerScroll(markerListRef.current?.scrollTop ?? 0)
+    })
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (markerScrollRaf.current) cancelAnimationFrame(markerScrollRaf.current)
+    },
+    [],
+  )
 
   // Follows the .bx dropdown: exporting a variant the user isn't watching would
   // be silently wrong.
@@ -587,29 +660,22 @@ function WatchInner() {
 
     async function loadMoreVideos() {
       try {
-        const manifest = await fetchJSON<string[]>(`${VIDEO_BASE}/manifest.json`)
-        const otherIds = manifest.filter((id) => id !== currentId)
+        /**
+         * One request, not one per video. This used to read the manifest and
+         * then fetch all 71 other meta.json files to pick five suggestions,
+         * launched in the same pass as the video load. Over HTTP/1.1 the
+         * browser has about six sockets to this origin, so those 71 sat
+         * directly in front of the range requests a multi-GB carrier needs to
+         * fill its first buffer, which is the worst possible moment to queue
+         * anything.
+         */
+        const library = await fetchJSON<{ videos: SuggestionMeta[] }>(LIBRARY_API)
+        const valid = (library.videos || []).filter((m) => m._folder !== currentId)
 
-        if (otherIds.length === 0) {
+        if (valid.length === 0) {
           if (!cancelled) setSuggestions({ state: 'empty' })
           return
         }
-
-        const metas = await Promise.all(
-          otherIds.map((id) => {
-            const url = `${VIDEO_BASE}/${encodeURIComponent(id)}/meta.json`
-            return fetch(url, { cache: 'no-store' })
-              .then((res) => {
-                if (res.status === 404) return { title: id, _folder: id } as SuggestionMeta
-                if (!res.ok) return null
-                return res
-                  .json()
-                  .then((m: VideoMeta) => ({ ...m, _folder: id }) as SuggestionMeta)
-              })
-              .catch(() => null)
-          }),
-        )
-        const valid = metas.filter(Boolean) as SuggestionMeta[]
 
         const tagSet = new Set(currentTags.map((t) => t.toLowerCase()))
         const scored = valid.map((m) => {
@@ -884,29 +950,60 @@ function WatchInner() {
                   like beryllium has ~4k markers × 6 elements, and the per-frame
                   `.current` toggle below invalidates style across the whole
                   subtree — enough to cost ~35ms frames even with the panel
-                  `display: none`. Measured: 135 → 144fps, p99 34.7 → 7.1ms. */}
-              <div className="marker-list" id="markerList">
-                {sidebarTab === 'bx' && activeMarkers.map((m, i) => (
+                  `display: none`. Measured: 135 → 144fps, p99 34.7 → 7.1ms.
+
+                  And only the rows near the scrollport render even then: a
+                  longform path is 21k markers, which is ~126k nodes built in
+                  one go and reconciled again on every render of this page. The
+                  two spacers hold the scroll range open for the rest. */}
+              <div
+                className="marker-list"
+                id="markerList"
+                onScroll={onMarkerScroll}
+                ref={markerListRef}
+              >
+                {sidebarTab === 'bx' && markerSlice.start > 0 && (
                   <div
-                    className="marker-list-item"
-                    data-frame={m.frame}
-                    id={`mli-${i}`}
-                    key={`${activeBxIndex}-${i}`}
-                    onClick={() => seekToFrame(m.frame)}
-                  >
-                    <span className="marker-frame-num">{m.frame}</span>
-                    <div className="marker-depth-bar">
+                    className="marker-list-spacer"
+                    style={{ height: markerSlice.start * markerPitch }}
+                  />
+                )}
+                {sidebarTab === 'bx' &&
+                  activeMarkers.slice(markerSlice.start, markerSlice.end).map((m, n) => {
+                    // Absolute, not slice-relative: the engine looks rows up by
+                    // `mli-<marker index>` and the key must not shift a row's
+                    // identity every time the window moves.
+                    const i = markerSlice.start + n
+                    return (
                       <div
-                        className="marker-depth-fill"
-                        style={{ width: `${(m.depth * 100).toFixed(1)}%` }}
-                      ></div>
-                    </div>
-                    <span className="marker-depth-val">{m.depth.toFixed(2)}</span>
-                    <span className="marker-ease-tag">
-                      {easeLabel(m.trans, m.ease)}
-                    </span>
-                  </div>
-                ))}
+                        className="marker-list-item"
+                        data-frame={m.frame}
+                        id={`mli-${i}`}
+                        key={`${activeBxIndex}-${i}`}
+                        onClick={() => seekToFrame(m.frame)}
+                      >
+                        <span className="marker-frame-num">{m.frame}</span>
+                        <div className="marker-depth-bar">
+                          <div
+                            className="marker-depth-fill"
+                            style={{ width: `${(m.depth * 100).toFixed(1)}%` }}
+                          ></div>
+                        </div>
+                        <span className="marker-depth-val">{m.depth.toFixed(2)}</span>
+                        <span className="marker-ease-tag">
+                          {easeLabel(m.trans, m.ease)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                {sidebarTab === 'bx' && markerSlice.end < activeMarkers.length && (
+                  <div
+                    className="marker-list-spacer"
+                    style={{
+                      height: (activeMarkers.length - markerSlice.end) * markerPitch,
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>

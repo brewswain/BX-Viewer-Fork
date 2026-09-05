@@ -608,32 +608,75 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     }
 
     const visRange = Math.ceil(W / basePixPerFrame) + 4
-    const viewerXCache = new Map<number, number>()
-    viewerXCache.set(curFrameExact, ballX)
-
-    let xAccR = ballX
     const vMaxF = Math.min(totalFrames - 1, Math.ceil(curFrameExact) + visRange)
-    for (let f = Math.ceil(curFrameExact); f <= vMaxF; f++) {
-      xAccR += basePixPerFrame * viewerSpeedAt(f - 0.5)
-      viewerXCache.set(f, xAccR)
-    }
-    let xAccL = ballX
     const vMinF = Math.max(0, Math.floor(curFrameExact) - visRange)
-    for (let f = Math.floor(curFrameExact); f >= vMinF; f--) {
-      if (!viewerXCache.has(f)) {
-        xAccL -= basePixPerFrame * viewerSpeedAt(f + 0.5)
-        viewerXCache.set(f, xAccL)
+
+    // The integration only earns its keep while a pathSpeed zone is actually
+    // stretching the spacing; with every step at 1.0 the accumulation is just a
+    // count of basePixPerFrame. A full-width strip is ~1300 frames, so leaving it
+    // in meant allocating a Map and filling it every frame to say "no change".
+    // activeEffects is empty for every path in this library, so the test is a
+    // `.some()` over an empty array.
+    const speedScaled =
+      userSettings.effectsSpeedEnabled !== false &&
+      activeEffects.some((ef) => ef.type === 'pathSpeed')
+
+    let viewerFrameToX: (f: number) => number
+
+    if (!speedScaled) {
+      // Closed form, deliberately reproducing the accumulation's quirks rather
+      // than the "obvious" ballX + (f - curFrameExact) * pxPerFrame: the first
+      // step out of the playhead is charged as a WHOLE frame in both directions,
+      // which is what quantises the strip to frame boundaries instead of letting
+      // it scroll sub-frame, and frames outside the accumulated window are the one
+      // place exact distance from curFrameExact is used.
+      const cfCeil = Math.ceil(curFrameExact)
+      const cfFloor = Math.floor(curFrameExact)
+      // On an integer playhead the rightward pass overwrites the playhead's own
+      // slot, so the leftward pass skips it and lands one frame short.
+      const leftBias = cfCeil === cfFloor ? 0 : 1
+      const xAt = (n: number): number => {
+        if (n >= cfCeil && n <= vMaxF)
+          return ballX + (n - cfCeil + 1) * basePixPerFrame
+        if (n <= cfFloor && n >= vMinF)
+          return ballX - (cfFloor - n + leftBias) * basePixPerFrame
+        return ballX + (n - curFrameExact) * basePixPerFrame
       }
-    }
-    function viewerFrameToX(f: number): number {
-      if (viewerXCache.has(f)) return viewerXCache.get(f) as number
-      const fl = Math.floor(f),
-        fr = Math.ceil(f)
-      const xl =
-        viewerXCache.get(fl) ?? ballX + (fl - curFrameExact) * basePixPerFrame
-      const xr =
-        viewerXCache.get(fr) ?? ballX + (fr - curFrameExact) * basePixPerFrame
-      return xl + (xr - xl) * (f - fl)
+      viewerFrameToX = (f) => {
+        // A fractional playhead keeps its own exact key at ballX; an integer one
+        // does not, having been overwritten above.
+        if (leftBias === 1 && f === curFrameExact) return ballX
+        const fl = Math.floor(f),
+          fr = Math.ceil(f)
+        const xl = xAt(fl)
+        return xl + (xAt(fr) - xl) * (f - fl)
+      }
+    } else {
+      const viewerXCache = new Map<number, number>()
+      viewerXCache.set(curFrameExact, ballX)
+
+      let xAccR = ballX
+      for (let f = Math.ceil(curFrameExact); f <= vMaxF; f++) {
+        xAccR += basePixPerFrame * viewerSpeedAt(f - 0.5)
+        viewerXCache.set(f, xAccR)
+      }
+      let xAccL = ballX
+      for (let f = Math.floor(curFrameExact); f >= vMinF; f--) {
+        if (!viewerXCache.has(f)) {
+          xAccL -= basePixPerFrame * viewerSpeedAt(f + 0.5)
+          viewerXCache.set(f, xAccL)
+        }
+      }
+      viewerFrameToX = (f) => {
+        if (viewerXCache.has(f)) return viewerXCache.get(f) as number
+        const fl = Math.floor(f),
+          fr = Math.ceil(f)
+        const xl =
+          viewerXCache.get(fl) ?? ballX + (fl - curFrameExact) * basePixPerFrame
+        const xr =
+          viewerXCache.get(fr) ?? ballX + (fr - curFrameExact) * basePixPerFrame
+        return xl + (xr - xl) * (f - fl)
+      }
     }
 
     const startFrame = vMinF
@@ -1617,7 +1660,13 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     // Re-checked per hover rather than latched, because the duration this reads
     // arrives after the element does and a playlist can walk from a clip onto a
     // carrier.
-    if (!previewWorthBuilding(video.duration)) return null
+    if (!previewWorthBuilding(video.duration)) {
+      // Walking from a clip onto a carrier refuses the new element while the
+      // clip's is still standing, and the bubble would go on showing a frame
+      // out of the previous video until the idle timer got to it.
+      if (previewSrc && previewSrc !== src) teardownPreview()
+      return null
+    }
     if (src === previewSrc) return previewFailed ? null : previewVideo
     teardownPreview()
     previewSrc = src
