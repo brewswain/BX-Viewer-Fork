@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bx-video-v1788644041'
+const CACHE_NAME = 'bx-video-v1788732432'
 /**
  * BounceX Viewer – Service Worker
  *

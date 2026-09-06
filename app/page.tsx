@@ -19,6 +19,7 @@ import FilterBar, {
 import PlaylistCard, { type PlaylistMeta } from '@/components/browse/PlaylistCard'
 import VideoCard, { type VideoMeta } from '@/components/browse/VideoCard'
 import ViewToggle, { type ViewMode } from '@/components/browse/ViewToggle'
+import { filterByCategory } from '@/lib/browse/tagFilter'
 import { loadPlaylistPrefs, savePlaylistPrefs } from '@/lib/player/playback'
 import {
   QUICK_PLAYLIST_ID,
@@ -173,15 +174,9 @@ function Browse() {
   const { videoType, difficulty, songQuantity, pathCreator, videoCreator, tags } =
     filters
   let filtered = videos
-  if (videoType.size > 0)
-    filtered = filtered.filter((v) => (v.tags || []).some((t) => videoType.has(t)))
-  if (difficulty.size > 0)
-    filtered = filtered.filter((v) => (v.tags || []).some((t) => difficulty.has(t)))
-
-  if (songQuantity.size > 0)
-    filtered = filtered.filter((v) =>
-      (v.tags || []).some((t) => songQuantity.has(t)),
-    )
+  filtered = filterByCategory(filtered, videoType)
+  filtered = filterByCategory(filtered, difficulty)
+  filtered = filterByCategory(filtered, songQuantity)
 
   if (pathCreator.size > 0)
     filtered = filtered.filter((v) => pathCreator.has(v.pathCreator as string))
