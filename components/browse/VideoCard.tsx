@@ -20,6 +20,12 @@ export type VideoMeta = {
   tags?: string[]
   highlightedTags?: string[]
   bxFiles?: Array<{ label: string; file: string }>
+  /**
+   * Breath cycles this video's paths deal, stamped by `/api/library` off the .bx
+   * files themselves. Absent on every ordinary video rather than 0, so the field
+   * only appears where it means something.
+   */
+  poppersCycles?: number
 }
 
 export function framesToTimecode(frames: number, fps = 60): string {
@@ -138,6 +144,7 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
         : null
 
   const highlights = (video.highlightedTags || []).slice(0, 3)
+  const popCycles = video.poppersCycles || 0
 
   const [thumbFailed, setThumbFailed] = useState(false)
   const [probedTimecode, setProbedTimecode] = useState<string | null>(null)
@@ -181,6 +188,18 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
       </div>
       <div className="card-body">
         <div className="card-highlight-tags">
+          {/* First, so it lands in the same place on every card whatever the
+              highlights are, and so a card with three of them cannot push it
+              onto a second line. */}
+          {popCycles > 0 && (
+            <span
+              className="card-tag card-tag-poppers"
+              title={`Deals ${popCycles} breath ${popCycles === 1 ? 'cycle' : 'cycles'}: get ready, inhale, hold, exhale.`}
+            >
+              poppers
+              <span className="card-tag-count">{popCycles}</span>
+            </span>
+          )}
           {highlights.map((t) => (
             <span className="card-tag" key={t}>
               {t}

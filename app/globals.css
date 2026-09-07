@@ -541,6 +541,33 @@ body {
   text-transform: lowercase;
 }
 
+/* The browse grid's half of the breath-cue pill, teal against the highlight
+   row's amber for the same reason the watch page's is: it is read off the .bx
+   rather than out of `meta.tags`, so it is a different kind of thing. No
+   `cursor: default` here, unlike `.video-tag-poppers`: the whole card is a
+   link and this one really does go somewhere. */
+.card-tag-poppers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--teal);
+  background: var(--teal-glow);
+  border-color: rgba(61, 214, 200, 0.35);
+}
+
+.video-card:hover .card-tag-poppers {
+  border-color: rgba(61, 214, 200, 0.55);
+}
+
+.card-tag-count {
+  font-size: 0.58rem;
+  line-height: 1;
+  padding: 0.12rem 0.3rem;
+  border-radius: 999px;
+  background: rgba(61, 214, 200, 0.22);
+  color: var(--text);
+}
+
 .card-title {
   font-family: var(--serif);
   font-size: 1.05rem;
@@ -799,6 +826,77 @@ body {
 .bouncex-canvas {
   width: 100%;
   display: block;
+}
+
+/* ── The poppers badge on the strip ──
+   Theater-only, because theater is the one view that hides `.video-info` and
+   takes the #poppers pill with it. Anchored right so it never sits under a
+   card: the cues are drawn at posX 50, centred.
+
+   It announces itself for a few seconds and then settles to a dim resting
+   state rather than fading out, so it is still answerable ten minutes in
+   without being a bright object in a dark room. `enterTheater` removes and
+   re-adds `theater-mode` specifically to replay animations, so the announce
+   runs again every time theater is opened. */
+.bx-poppers-badge {
+  display: none;
+}
+
+body.theater-mode .bouncex-wrap .bx-poppers-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  position: absolute;
+  top: 0.45rem;
+  right: 0.6rem;
+  z-index: 2;
+  pointer-events: none;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+  background: rgba(10, 11, 15, 0.55);
+  border: 1px solid rgba(61, 214, 200, 0.35);
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  animation: poppers-badge-settle 6s ease-out forwards;
+}
+
+.bx-poppers-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 6px var(--teal);
+}
+
+.bx-poppers-count {
+  color: var(--text2);
+  letter-spacing: 0.06em;
+}
+
+@keyframes poppers-badge-settle {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  8%,
+  55% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0.34;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.theater-mode .bouncex-wrap .bx-poppers-badge {
+    animation: none;
+    opacity: 0.34;
+  }
 }
 
 /* ── Player Controls ── */
@@ -1215,6 +1313,34 @@ body {
   background: var(--accent-glow);
 }
 
+/* The breath-cue pill. Teal rather than the tag row's grey because it is not a
+   `meta.tags` entry and does not link anywhere: it is read off the loaded .bx,
+   so it has to look like a different kind of thing or it reads as a dead tag. */
+.video-tag-poppers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--teal);
+  background: var(--teal-glow);
+  border-color: rgba(61, 214, 200, 0.35);
+  cursor: default;
+}
+
+.video-tag-poppers:hover {
+  color: var(--teal);
+  background: var(--teal-glow);
+  border-color: rgba(61, 214, 200, 0.55);
+}
+
+.video-tag-count {
+  font-size: 0.62rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(61, 214, 200, 0.22);
+  color: var(--text);
+}
+
 /* ── Sidebar ── */
 .player-sidebar {
 }
@@ -1351,6 +1477,18 @@ body {
   background: rgba(61, 214, 200, 0.1);
   color: var(--accent);
   border: 1px solid rgba(61, 214, 200, 0.2);
+}
+
+/* Two classes on purpose. `.card-tag-poppers` is defined ~900 lines above this,
+   so with equal specificity `.more-video-tag` would win source order and the
+   pill would come out amber like the tags beside it. */
+.more-video-tag.card-tag-poppers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--teal);
+  background: var(--teal-glow);
+  border-color: rgba(61, 214, 200, 0.35);
 }
 
 .sidebar-section {

@@ -42,6 +42,7 @@ import {
   renderDescription,
 } from '@/lib/player/format'
 import { MARKER_ROW_PITCH, markerWindow } from '@/lib/player/markerWindow'
+import { poppersCycles } from '@/lib/player/poppers'
 import { formatSeekTime } from '@/lib/player/seekTooltip'
 import type { BxSource, Marker, VideoMeta } from '@/lib/player/types'
 import type { OssmItem } from '@/lib/ossm/types'
@@ -232,6 +233,13 @@ function WatchInner() {
     [loaded, activeBxIndex],
   )
   activeMarkersRef.current = activeMarkers
+  // Per PATH, not per video: `The KDA Experience` and Luna's Edition each carry
+  // two .bx files and the cues went into one of them, so switching the dropdown
+  // has to move the pill with it.
+  const popCycles = useMemo(
+    () => poppersCycles(loaded?.bxSources[activeBxIndex]?.effects),
+    [loaded, activeBxIndex],
+  )
   // Read from the engine's per-frame callback, which is created once and must
   // not close over a stale tab.
   const sidebarTabRef = useRef(sidebarTab)
@@ -791,6 +799,7 @@ function WatchInner() {
               videoRef={videoRef}
               canvasRef={canvasRef}
               bxWrapRef={bxWrapRef}
+              poppersCycles={popCycles}
             />
             <PlayerControls
               hasFlipY
@@ -855,6 +864,20 @@ function WatchInner() {
             ))}
 
             <div className="video-tags-section">
+              {/* Not a `meta.tags` entry and deliberately not a search link: the
+                  cues live in the .bx rather than in meta.json, so this is read
+                  off the loaded path and there is nothing for /?q= to match. */}
+              {popCycles > 0 && (
+                <span
+                  className="video-tag video-tag-poppers"
+                  title={`This path deals ${popCycles} breath ${
+                    popCycles === 1 ? 'cycle' : 'cycles'
+                  }: get ready, inhale, hold, exhale.`}
+                >
+                  #poppers
+                  <span className="video-tag-count">{popCycles}</span>
+                </span>
+              )}
               {tags.map((t, i) => (
                 <Link
                   href={`/?q=${encodeURIComponent(t)}`}
@@ -1080,6 +1103,15 @@ function MoreVideos({ suggestions }: { suggestions: Suggestions }) {
               <div className="more-video-title">{m.title || folder}</div>
               <div className="more-video-author">{m.pathCreator || ''}</div>
               <div className="more-video-tags">
+                {/* Same object as the browse grid's pill, same field off
+                    /api/library, so the two surfaces cannot disagree about
+                    which videos deal breath. */}
+                {(m.poppersCycles || 0) > 0 && (
+                  <span className="more-video-tag card-tag-poppers">
+                    poppers
+                    <span className="card-tag-count">{m.poppersCycles}</span>
+                  </span>
+                )}
                 {highlights.map((t, i) => (
                   <span className="more-video-tag" key={i}>
                     {t}

@@ -1,7 +1,8 @@
 import path from 'node:path'
 import { jsonResponse, readJson } from '@/lib/json'
 import { manifestExists, readManifest } from '@/lib/manager/manifest'
-import { PLAYLIST_BASE, VIDEO_BASE, isValidId } from '@/lib/paths'
+import { scanPoppersCycles } from '@/lib/player/poppersScan'
+import { PLAYLIST_BASE, VIDEO_BASE, isValidId, videoDir } from '@/lib/paths'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -61,10 +62,37 @@ async function readEntries(
   return entries.filter(Boolean) as Entry[]
 }
 
+/**
+ * Stamp each video with the breath cycles its paths deal, for the browse grid's
+ * `poppers` pill.
+ *
+ * It has to be derived here rather than stored in meta.json, because the cards
+ * are the only evidence and a stored number would drift the moment a .bx is
+ * rewritten. The cost is bounded by an mtime cache inside the scan, so this is a
+ * stat per .bx after the first request; see `lib/player/poppersScan.ts` for why
+ * the route's own no-cache rule does not carry to it.
+ */
+async function stampPoppers(videos: Entry[]): Promise<void> {
+  await Promise.all(
+    videos.map(async (v) => {
+      const folder = v._folder
+      if (typeof folder !== 'string') return
+      const files = Array.isArray(v.bxFiles)
+        ? (v.bxFiles as Array<{ file?: unknown }>)
+            .map((b) => (b && typeof b.file === 'string' ? b.file : null))
+            .filter((f): f is string => f !== null)
+        : []
+      const cycles = await scanPoppersCycles(videoDir(folder), files)
+      if (cycles > 0) v.poppersCycles = cycles
+    }),
+  )
+}
+
 export async function GET() {
   const [videos, playlists] = await Promise.all([
     readEntries('videos', VIDEO_BASE, '_folder', defaultVideoMeta),
     readEntries('playlists', PLAYLIST_BASE, '_id', null),
   ])
+  await stampPoppers(videos)
   return jsonResponse({ videos, playlists })
 }

@@ -51,6 +51,7 @@ import {
   usePlayback,
 } from '@/lib/player/playbackStore'
 import { fetchJSON, fetchText, framesToTimecode, renderDescription } from '@/lib/player/format'
+import { poppersCycles } from '@/lib/player/poppers'
 import type {
   BxEffect,
   BxFileRef,
@@ -116,6 +117,9 @@ function PlaylistInner() {
   // lives inside an effect that deliberately doesn't re-run on state changes.
   const [bxOverrides, setBxOverrides] = useState<Record<number, string>>({})
   const bxOverridesRef = useRef<Record<number, string>>({})
+  // Breath cycles on the track that is playing. Set from inside `loadTrack`,
+  // which is imperative, so a state setter is the only way out to the badge.
+  const [popCycles, setPopCycles] = useState(0)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -329,6 +333,9 @@ function PlaylistInner() {
       }
 
       engine.loadBxData(newPath, newTotalFrames, newEffects, newPeaks)
+      // Set after the catch, so a track whose .bx failed to load clears the
+      // previous track's badge rather than inheriting it.
+      setPopCycles(poppersCycles(newEffects))
       // meta.offset is milliseconds (the manager's Offset field is labelled "ms");
       // setOffset takes seconds. The legacy playlist page passed it raw, so any
       // offset came out 1000x too large and the path never started.
@@ -540,6 +547,7 @@ function PlaylistInner() {
               videoRef={videoRef}
               canvasRef={canvasRef}
               bxWrapRef={bxWrapRef}
+              poppersCycles={popCycles}
             />
             <PlayerControls
               hasPrevNext
@@ -587,6 +595,21 @@ function PlaylistInner() {
                 </span>
               </div>
             </div>
+            {/* The playlist page carries no tags of its own, so this row exists
+                only when the track that is playing deals breath. */}
+            {popCycles > 0 && (
+              <div className="video-tags-section" style={{ marginTop: '1rem' }}>
+                <span
+                  className="video-tag video-tag-poppers"
+                  title={`This path deals ${popCycles} breath ${
+                    popCycles === 1 ? 'cycle' : 'cycles'
+                  }: get ready, inhale, hold, exhale.`}
+                >
+                  #poppers
+                  <span className="video-tag-count">{popCycles}</span>
+                </span>
+              </div>
+            )}
             <div id="videoDescContainer">
               {descriptionParagraphs(current).map((p, i) => (
                 <p

@@ -74,6 +74,14 @@ export type VideoMeta = {
   offset?: number
   bxFile?: string
   bxFiles?: BxFileRef[]
+  /**
+   * Breath cycles this video's paths deal. NOT a meta.json field: `/api/library`
+   * derives it from the .bx files and stamps it on, so it is present only on
+   * metas that came from that route and absent (not 0) on every ordinary video.
+   * A meta fetched straight off disk will never carry it, which is why the watch
+   * page's own pill counts the LOADED path instead of reading this.
+   */
+  poppersCycles?: number
 }
 
 export type PlaylistEntry = string | { id?: string; videoId?: string; bxFile?: string }

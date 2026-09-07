@@ -18,6 +18,8 @@ type Props = {
   videoRef?: RefObject<HTMLVideoElement | null>
   canvasRef?: RefObject<HTMLCanvasElement | null>
   bxWrapRef?: RefObject<HTMLDivElement | null>
+  /** Breath cycles the loaded path deals; 0 for every ordinary path. */
+  poppersCycles?: number
 }
 
 function VideoWrap({
@@ -26,6 +28,7 @@ function VideoWrap({
   videoRef,
   canvasRef,
   bxWrapRef,
+  poppersCycles = 0,
 }: Props) {
   const preload = hasLoadingOverlays ? 'auto' : 'metadata'
 
@@ -99,6 +102,18 @@ function VideoWrap({
       )}
       <div className="bouncex-wrap" id="bxWrap" ref={bxWrapRef}>
         <canvas className="bouncex-canvas" id="bxCanvas" ref={canvasRef}></canvas>
+        {/* Theater hides `.video-info`, so the #poppers pill down there goes with
+            it. This says the same thing on the strip the cards are drawn in, loud
+            for the first few seconds after theater opens and dim from then on. */}
+        {poppersCycles > 0 && (
+          <div className="bx-poppers-badge" aria-hidden="true">
+            <span className="bx-poppers-dot" />
+            poppers
+            <span className="bx-poppers-count">
+              {poppersCycles} {poppersCycles === 1 ? 'cycle' : 'cycles'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )
