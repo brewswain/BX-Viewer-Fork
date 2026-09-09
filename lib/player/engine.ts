@@ -1184,6 +1184,19 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   function onPresentedFrame(_now: number, meta: VideoFrameMeta) {
     frameCallbackId = 0
+    // Re-seed the playhead from the frame ACTUALLY ON SCREEN. `smoothTime` is a
+    // wall-clock integrator that is otherwise only corrected once it is more
+    // than 0.1 s out — six frames at 60 — and it re-seeds to a fresh arbitrary
+    // residual on every seek, so the error also differs per track in a
+    // compilation. That slack is several times larger than anything in the .bx
+    // files it draws, and it is what makes a correct path read as trailing the
+    // picture and drifting. `mediaTime` is the presentation timestamp of the
+    // presented frame, so it is the one clock that agrees with a path burnt
+    // into that same frame — which is how the error was found. The integrator
+    // stays: it carries the ball between presentations on a display refreshing
+    // faster than the video, and it is the whole fallback on Firefox, which has
+    // no rVFC.
+    if (!isSeeking && !video.paused && !video.ended) smoothTime = meta.mediaTime
     // Only real-time playback measures anything: a seek presents one frame out
     // of nowhere, and a rate change scales media time against wall time.
     if (!video.paused && !video.ended && video.playbackRate === 1) {
