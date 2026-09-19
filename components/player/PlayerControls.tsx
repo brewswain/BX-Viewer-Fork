@@ -459,7 +459,7 @@ function PlayerControls({
         </div>
 
         <div className="volume-wrap">
-          <button className="ctrl-btn" id="btnMute" title="Mute (M) — volume is ↑ / ↓">
+          <button className="ctrl-btn" id="btnMute" title="Mute (M) — volume is ↑ / ↓, or scroll over this control (anywhere on the player in theater or fullscreen)">
             <svg
               viewBox="0 0 24 24"
               fill="none"

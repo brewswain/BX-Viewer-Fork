@@ -50,6 +50,11 @@ export function escHtml(s: unknown): string {
 export function renderDescription(text: unknown): string {
   return escHtml(text)
     .replace(/\\n/g, '<br>')
+    // Every generated description opens on a bolded claim and none of them rendered:
+    // the studio side has written `**...**` since the first export and this function
+    // only ever knew about links, so the asterisks reached the screen as asterisks.
+    // Safe after escHtml, which has already neutralised any markup in the source.
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
       (_m: string, label: string, url: string) =>

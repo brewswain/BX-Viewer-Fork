@@ -1406,6 +1406,70 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   on(volumeSlider, 'input', () => setVolume(parseFloat(volumeSlider.value)))
   on(btnMute, 'click', toggleMute)
 
+  // ── Wheel volume ────────────────────────────────────────────────────────────
+  // Media-player behaviour: in theater or fullscreen the wheel anywhere over the
+  // player is volume; on the normal page only the volume control claims it, the
+  // way YouTube does, so the page still scrolls under the picture.
+  //
+  // Deltas are accumulated into whole steps rather than applied per event: a
+  // wheel notch is one ~100px event, but a trackpad sends dozens of tiny ones,
+  // and per-event steps would slam the volume to either end in one swipe.
+  const WHEEL_STEP = 0.05 // same as ↑ / ↓
+  const WHEEL_NOTCH_PX = 100
+  const volumeWrap = volumeSlider.closest<HTMLElement>('.volume-wrap')
+  let wheelAccum = 0
+  let wheelIdleTimer: ReturnType<typeof setTimeout> | null = null
+
+  function claimsWheel(target: Node): boolean {
+    if (volumeWrap?.contains(target)) return true
+    if (!isFullscreen() && !isTheater) return false
+    // The fit popover has sliders of its own; leave the wheel to them.
+    if (fitPopover?.contains(target)) return false
+    return playerContainer.contains(target)
+  }
+
+  on(
+    document,
+    'wheel',
+    (e: WheelEvent) => {
+      // Ctrl+wheel is the browser's zoom (and a trackpad pinch); horizontal
+      // swipes are not volume either.
+      if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+      if (!(e.target instanceof Node) || !claimsWheel(e.target)) return
+      e.preventDefault()
+
+      const px =
+        e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? e.deltaY * 40
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? e.deltaY * 800
+            : e.deltaY
+      // A reversal starts fresh, so the leftover from the other way is not
+      // eaten before the first step lands.
+      if (Math.sign(px) !== Math.sign(wheelAccum)) wheelAccum = 0
+      wheelAccum += px
+      if (wheelIdleTimer) clearTimeout(wheelIdleTimer)
+      wheelIdleTimer = setTimeout(() => {
+        wheelAccum = 0
+      }, 250)
+
+      const steps = Math.trunc(wheelAccum / WHEEL_NOTCH_PX)
+      if (steps === 0) return
+      wheelAccum -= steps * WHEEL_NOTCH_PX
+      // Muted reads as 0 on the slider, so that is where the wheel starts from;
+      // otherwise scrolling down while muted would unmute at the old level.
+      const from = video.muted ? 0 : video.volume
+      // deltaY is positive for scrolling down, which is quieter.
+      setVolume(Math.round((from - steps * WHEEL_STEP) * 100) / 100)
+      // The bar is hidden in both modes; without it there is no feedback.
+      if (isFullscreen() || isTheater) showControls()
+    },
+    { passive: false },
+  )
+  cleanups.push(() => {
+    if (wheelIdleTimer) clearTimeout(wheelIdleTimer)
+  })
+
   function updateVolIcon() {
     if (video.muted || video.volume === 0) {
       volIcon.innerHTML = `<polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`
