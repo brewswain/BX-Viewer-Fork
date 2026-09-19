@@ -66,6 +66,8 @@ type Props = {
    * fullscreen, so the drawer closes with theater without a second owner.
    */
   hasPlaylistDrawer?: boolean
+  /** What the drawer holds, for its tooltip: the playlist, or the watch page's tabs. */
+  drawerLabel?: string
   /** Contents of `#bxSelectWrap` — the bx-file `<select>`, when there is one. */
   bxSelect?: ReactNode
   /** Total tracks for trackDisplay (playlist). */
@@ -86,6 +88,7 @@ function PlayerControls({
   shuffle = null,
   onToggleShuffle,
   hasPlaylistDrawer = false,
+  drawerLabel = 'Playlist',
   bxSelect = null,
   totalCount = null,
   duration = '00:00',
@@ -236,8 +239,8 @@ function PlayerControls({
           <button
             className="ctrl-btn theater-only"
             id="btnPlaylistDrawer"
-            title="Playlist (P)"
-            aria-label="Toggle playlist"
+            title={`${drawerLabel} (P)`}
+            aria-label={`Toggle ${drawerLabel.toLowerCase()}`}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="3" y1="6" x2="14" y2="6" />
@@ -251,7 +254,7 @@ function PlayerControls({
         {/* The fit popover anchors to this pair, so they share a positioned
             wrapper rather than sitting loose in the controls row. */}
         <div className="theater-fit-wrap">
-          <button className="ctrl-btn" id="btnTheater" title="Theater mode (T)">
+          <button className="ctrl-btn" id="btnTheater" title="Theater mode (T). Shift+T swaps immersive / classic">
             <svg
               viewBox="0 0 24 24"
               fill="none"

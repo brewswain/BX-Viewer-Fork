@@ -803,6 +803,8 @@ function WatchInner() {
             />
             <PlayerControls
               hasFlipY
+              hasPlaylistDrawer
+              drawerLabel="Sidebar"
               bxSelect={bxSelect}
               duration=""
               loopMode={loopMode}

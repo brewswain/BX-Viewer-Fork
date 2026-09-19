@@ -212,7 +212,8 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const rateValueEl = byId<HTMLElement>('playbackRateValue')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
   const pathBtn = byId<HTMLButtonElement>('pathBtn')
-  // Theater playlist drawer — both null outside the playlist page.
+  // Theater sidebar drawer. The toggle is on the watch and playlist pages; the
+  // close button is the playlist page's alone.
   const btnPlaylistDrawer = byId<HTMLButtonElement>('btnPlaylistDrawer')
   const btnCloseDrawer = byId<HTMLButtonElement>('btnTheaterSidebarClose')
   const tapIndicator = byId<HTMLElement>('videoTapIndicator')
@@ -294,6 +295,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   /** Geometry last written by `applyTheaterFit`, so it can skip no-op writes. */
   let lastFitSig = ''
   let isTheater = false
+  // Shift+T flips this for the session only; the settings page owns the default.
+  let theaterStyle: 'immersive' | 'classic' =
+    userSettings.theaterStyle === 'classic' ? 'classic' : 'immersive'
+  /**
+   * Classic theater is a page, not a stage: the bar is docked, the sidebar is a
+   * column and the page scrolls. So it opts out of everything that hides chrome
+   * or hijacks the pointer, and keeps only the bigger picture and the fit.
+   */
+  function isClassicTheater(): boolean {
+    return isTheater && theaterStyle === 'classic'
+  }
   // The persisted starting point, and the live copy the popover drags. Kept
   // apart so Reset has something to go back to without re-reading storage.
   const storedLimits = {
@@ -1422,7 +1434,8 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   function claimsWheel(target: Node): boolean {
     if (volumeWrap?.contains(target)) return true
-    if (!isFullscreen() && !isTheater) return false
+    // Classic scrolls down to the description, so the wheel stays the page's.
+    if (!isFullscreen() && (!isTheater || isClassicTheater())) return false
     // The fit popover has sliders of its own; leave the wheel to them.
     if (fitPopover?.contains(target)) return false
     return playerContainer.contains(target)
@@ -1907,8 +1920,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     bxWrap.style.bottom = ''
   }
 
+  /** Whether the control bar auto-hides. Classic docks it, like the normal page. */
   function isImmersive(): boolean {
-    return isFullscreen() || isTheater
+    return isFullscreen() || (isTheater && !isClassicTheater())
   }
 
   /**
@@ -2025,10 +2039,17 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
   function enterTheater() {
     isTheater = true
+    const classic = theaterStyle === 'classic'
     document.body.classList.remove('theater-mode') // reset to replay animation
     void document.body.offsetWidth // force reflow
+    document.body.classList.toggle('theater-classic', classic)
     document.body.classList.add('theater-mode')
     if (btnTheater) btnTheater.classList.add('active')
+    // Classic is the traditional layout, where the sidebar is part of the page;
+    // immersive keeps it out of the way until asked for.
+    setPlaylistDrawer(classic)
+    // Leaving immersive under a still pointer would leave it hidden.
+    if (classic) document.body.classList.remove('pointer-active')
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         resizeCanvas()
@@ -2043,7 +2064,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (cursorTimer) clearTimeout(cursorTimer)
     setFitPopover(false) // before hideControls, which refuses to run under it
     setPlaylistDrawer(false)
-    document.body.classList.remove('theater-mode', 'pointer-active')
+    document.body.classList.remove('theater-mode', 'theater-classic', 'pointer-active')
     if (btnTheater) btnTheater.classList.remove('active')
     hideControls()
     applyTheaterFit() // `isTheater` is already false: clears the stretch
@@ -2168,6 +2189,12 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (key === 't' && !e.shiftKey) {
       isTheater ? exitTheater() : enterTheater()
     }
+    // Swap theater styles for this session, entering theater if not already in.
+    if (key === 't' && e.shiftKey) {
+      theaterStyle = theaterStyle === 'classic' ? 'immersive' : 'classic'
+      setFitPopover(false)
+      enterTheater()
+    }
     // Unshifted only: Shift+P is the previous track.
     if (key === 'p' && !e.shiftKey && isTheater && btnPlaylistDrawer) {
       setPlaylistDrawer(!isDrawerOpen())
@@ -2180,8 +2207,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     if (e.key === 'Escape' && isTheater) {
       // Escape unwinds one layer at a time, innermost first, and only means
       // "leave theater" once nothing is left on top of the picture.
+      // Classic's sidebar is a column beside the picture, not a layer on it.
       if (isFitPopoverOpen()) setFitPopover(false)
-      else if (isDrawerOpen()) setPlaylistDrawer(false)
+      else if (isDrawerOpen() && !isClassicTheater()) setPlaylistDrawer(false)
       else exitTheater()
     }
   })
@@ -2191,7 +2219,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       showControls()
       return
     }
-    if (!isTheater) return
+    if (!isTheater || isClassicTheater()) return
     // The controls stay down, but the pointer itself still has to come back or
     // there is no feedback at all for moving the mouse.
     wakeCursor()
@@ -2298,6 +2326,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       cleanups.length = 0
       document.body.classList.remove(
         'theater-mode',
+        'theater-classic',
         'pointer-active',
         'theater-sidebar-open',
       )

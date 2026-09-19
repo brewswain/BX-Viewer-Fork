@@ -23,6 +23,7 @@ import {
   resetSettings,
   setSettings,
   type Settings,
+  type TheaterStyle,
 } from '@/lib/settings'
 
 function clamp01(v: number): number {
@@ -43,6 +44,7 @@ type FormState = {
   overlayBgOpacity: string
   defaultFlipY: boolean
   defaultTheater: boolean
+  theaterStyle: TheaterStyle
   /** Kept as strings — these mirror the raw <input> values, as the DOM did. */
   defaultZoom: string
   defaultPathSpeed: string
@@ -94,6 +96,7 @@ function toForm(s: Settings): FormState {
     overlayBgOpacity: String(clamp01(s.overlayBgOpacity)),
     defaultFlipY: s.defaultFlipY,
     defaultTheater: s.defaultTheater !== false,
+    theaterStyle: s.theaterStyle === 'classic' ? 'classic' : 'immersive',
     defaultZoom: String(s.defaultZoom),
     defaultPathSpeed: String(s.defaultPathSpeed),
     defaultPlaybackRate: String(clampRate(s.defaultPlaybackRate)),
@@ -168,6 +171,7 @@ export default function SettingsPage() {
       overlayBgOpacity: clamp01(parseFloat(form.overlayBgOpacity)),
       defaultFlipY: form.defaultFlipY,
       defaultTheater: form.defaultTheater,
+      theaterStyle: form.theaterStyle,
       defaultZoom: parseFloat(form.defaultZoom),
       defaultPathSpeed: parseFloat(form.defaultPathSpeed),
       defaultPlaybackRate: clampRate(parseFloat(form.defaultPlaybackRate)),
@@ -385,6 +389,19 @@ export default function SettingsPage() {
                   <span>Flip Y on</span>
                 </label>
               </div>
+              <label className="settings-row">
+                <span className="settings-label">Theater style</span>
+                <select
+                  className="settings-select"
+                  id="theaterStyle"
+                  name="theaterStyle"
+                  value={form.theaterStyle}
+                  onChange={(e) => set('theaterStyle', e.target.value as TheaterStyle)}
+                >
+                  <option value="immersive">Immersive: full screen, controls on hover</option>
+                  <option value="classic">Classic: sidebar open, controls docked, page scrolls</option>
+                </select>
+              </label>
               <label className="settings-row settings-row-slider">
                 <span className="settings-label">Overlay bg opacity</span>
                 <input

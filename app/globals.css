@@ -3002,6 +3002,95 @@ body.theater-mode .bouncex-wrap.overlay-mode {
   flex: none;
 }
 
+/* ── Classic theater ─────────────────────────────────────────────────────────
+   The YouTube-style alternative, layered on top of `theater-mode` so the engine
+   keeps its fit and strip sizing: header and page stay, the player fills the
+   height the header leaves, the bar is docked under it, the sidebar is a real
+   column (open by default, `theater-sidebar-open` collapses it) and the page
+   scrolls down to the title and description. Fullscreen from here falls back
+   to the plain theater rules, which is the stage fullscreen already expects.
+   ------------------------------------------------------------------------- */
+
+body.theater-mode.theater-classic {
+  overflow: auto;
+  cursor: auto;
+}
+
+body.theater-mode.theater-classic .player-video-wrap video {
+  cursor: pointer;
+}
+
+body.theater-mode.theater-classic .site-header {
+  display: flex;
+}
+body.theater-mode.theater-classic .video-info {
+  display: block;
+}
+
+body.theater-mode.theater-classic .player-layout {
+  grid-template-columns: minmax(0, 1fr) var(--theater-sidebar-w);
+  gap: 1.5rem;
+  padding: 1rem 1.5rem 2rem !important;
+}
+
+body.theater-mode.theater-classic:not(.theater-sidebar-open) .player-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.theater-mode.theater-classic #playerContainer:not(.fullscreen-active) {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  transition: none;
+  /* Header plus the layout's top padding and a little breathing room, so the
+     whole player (bar included) sits above the fold. */
+  height: calc(100vh - 60px - 2rem);
+  min-height: 360px;
+}
+
+body.theater-mode.theater-classic #playerContainer:not(.fullscreen-active) .player-controls {
+  position: static;
+  transform: none;
+  opacity: 1;
+  background: var(--bg2);
+  transition: none;
+}
+
+body.theater-mode.theater-classic .player-sidebar {
+  position: static;
+  width: auto;
+  padding: 0;
+  overflow: visible;
+  background: none;
+  border-left: none;
+  box-shadow: none;
+  transform: none;
+  visibility: visible;
+  transition: none;
+}
+
+body.theater-mode.theater-classic:not(.theater-sidebar-open) .player-sidebar {
+  display: none;
+}
+
+/* The control-bar button and P collapse it; the drawer's own × is overlay UI. */
+body.theater-mode.theater-classic .theater-sidebar-close {
+  display: none;
+}
+
+/* `.video-info` is back on screen with the #poppers pill in it. */
+body.theater-mode.theater-classic .bouncex-wrap .bx-poppers-badge {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  body.theater-mode.theater-classic .player-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ==========================================================================
    Manager page.  This block is appended last and relies on it: do not reorder
    it or insert rules above this line.  The html/body rule is scoped via

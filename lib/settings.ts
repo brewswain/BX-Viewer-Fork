@@ -10,6 +10,8 @@ import { MAX_STRETCH, MAX_ZOOM } from './player/theaterFit'
 
 export const BX_SETTINGS_KEY = 'bx_viewer_settings'
 
+export type TheaterStyle = 'immersive' | 'classic'
+
 export type Settings = {
   pathColor: string
   ballColor: string
@@ -29,6 +31,11 @@ export type Settings = {
   defaultFlipY: boolean
   /** Opt-out: videos open in theater mode unless this is explicitly false. */
   defaultTheater: boolean
+  /**
+   * `immersive` is the full-bleed stage with hover controls; `classic` is the
+   * YouTube-style page: docked controls, sidebar open, page scrolls to the info.
+   */
+  theaterStyle: TheaterStyle
   defaultZoom: number
   /** How fast the waveform scrolls. Nothing to do with `defaultPlaybackRate`. */
   defaultPathSpeed: number
@@ -98,6 +105,7 @@ export const DEFAULTS: Settings = {
   overlayBgOpacity: DEFAULT_OVERLAY_BG_OPACITY,
   defaultFlipY: false,
   defaultTheater: true,
+  theaterStyle: 'immersive',
   defaultZoom: 0.25,
   defaultPathSpeed: 1.0,
   defaultPlaybackRate: NORMAL_PLAYBACK_RATE,
