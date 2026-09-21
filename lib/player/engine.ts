@@ -19,11 +19,14 @@ import {
   BX_HEIGHT_OVERLAY,
   BX_THEATER_MAX_VH,
   BX_THEATER_MIN_VH,
+  BX_ZOOM_STEPS,
   DEFAULT_OVERLAY_BG_OPACITY,
   EDGE_PAD,
   FPS,
+  PATH_SPEED_STEPS,
   PX_PER_FRAME,
   THEATER_EDGE_ZONE,
+  snapStep,
 } from './constants'
 import {
   buildColors,
@@ -31,14 +34,7 @@ import {
   getEffectiveColorRgb,
   hexToRgbArr,
 } from './format'
-import {
-  NORMAL_PLAYBACK_RATE,
-  clampRate,
-  formatRate,
-  rateAt,
-  rateIndex,
-  stepRate,
-} from './playbackRate'
+import { NORMAL_PLAYBACK_RATE, clampRate, stepRate } from './playbackRate'
 import {
   completePreviewSeek,
   idlePreviewSeek,
@@ -205,11 +201,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   const seekTooltip = byId<HTMLElement>('progressTooltip')
   const seekTooltipTime = byId<HTMLElement>('progressTooltipTime')
   const seekTooltipThumb = byId<HTMLCanvasElement>('progressTooltipThumb')
-  const zoomSliderEl = byId<HTMLInputElement>('zoomSlider')
-  const speedSliderEl = byId<HTMLInputElement>('speedSlider')
-  // Carries a ladder index, not a rate — see `./playbackRate`.
-  const rateSliderEl = byId<HTMLInputElement>('playbackRateSlider')
-  const rateValueEl = byId<HTMLElement>('playbackRateValue')
+  const zoomSelectEl = byId<HTMLSelectElement>('zoomSelect')
+  const pathSpeedSelectEl = byId<HTMLSelectElement>('pathSpeedSelect')
+  // One option per rung of the rate ladder — see `./playbackRate`.
+  const rateSelectEl = byId<HTMLSelectElement>('playbackRateSelect')
   const flipYBtn = byId<HTMLButtonElement>('flipYBtn') // null in playlist
   const pathBtn = byId<HTMLButtonElement>('pathBtn')
   // Theater sidebar drawer. The toggle is on the watch and playlist pages; the
@@ -330,22 +325,14 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     cleanups.push(() => target.removeEventListener(type, fn, options))
   }
 
-  // ── Zoom default ────────────────────────────────────────────────────────────
-  const defaultZoom =
-    typeof userSettings.defaultZoom === 'number' &&
-    userSettings.defaultZoom >= 0.1 &&
-    userSettings.defaultZoom <= 1.0
-      ? userSettings.defaultZoom
-      : 0.45
-  zoomSliderEl.value = String(defaultZoom)
-
-  const defaultPathSpeed =
-    typeof userSettings.defaultPathSpeed === 'number' &&
-    userSettings.defaultPathSpeed >= 0.5 &&
-    userSettings.defaultPathSpeed <= 4.0
-      ? userSettings.defaultPathSpeed
-      : 1.0
-  speedSliderEl.value = String(defaultPathSpeed)
+  // ── Zoom / path-speed defaults ──────────────────────────────────────────────
+  // Snapped rather than clamped: a <select> silently shows nothing for a value
+  // it has no option for, so a saved default from outside the offered stops has
+  // to become one of them before it is assigned.
+  zoomSelectEl.value = String(snapStep(BX_ZOOM_STEPS, userSettings.defaultZoom, 0.45))
+  pathSpeedSelectEl.value = String(
+    snapStep(PATH_SPEED_STEPS, userSettings.defaultPathSpeed, 1),
+  )
 
   // ── Initial UI state ────────────────────────────────────────────────────────
   overlayBtn.textContent = `overlay: ${isOverlay ? 'on' : 'off'}`
@@ -424,8 +411,8 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     let h: number
     if (!isOverlay) {
       const refH = getOverlayRefHeight()
-      const sliderValue = parseFloat(zoomSliderEl.value)
-      const waveformPx = Math.min(2 * sliderValue * refH, refH)
+      const zoomValue = parseFloat(zoomSelectEl.value)
+      const waveformPx = Math.min(2 * zoomValue * refH, refH)
       h = Math.round(waveformPx) + 2 * (BALL_R + 2)
     } else if (isFullscreen() || isTheater) {
       h = Math.round(window.innerHeight * BX_THEATER_MAX_VH)
@@ -561,14 +548,14 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
 
     const { curFrameExact, curFrame, curDepth } = sampleAtPlayhead(path)
     const ballX = W / 2
-    const sliderValue = parseFloat(zoomSliderEl.value)
+    const zoomValue = parseFloat(zoomSelectEl.value)
     const BALL_MARGIN = BALL_R + 2
 
     let topY: number, bottomY: number
     if (isOverlay) {
       // Overlay: bottom is anchored to canvas bottom; zoom raises the top edge
       bottomY = H - BALL_MARGIN
-      topY = Math.max(BALL_MARGIN, H * (1 - 2 * sliderValue))
+      topY = Math.max(BALL_MARGIN, H * (1 - 2 * zoomValue))
     } else {
       // Normal: canvas height is already sized to the zoom level by resizeCanvas()
       topY = BALL_MARGIN
@@ -605,7 +592,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     // Per-frame speed integration: each frame's x is computed by accumulating
     // (pxPerFrame * speedAt(f)) from the playhead outward, so only frames inside
     // a speed effect zone get stretched — frames outside stay at normal spacing.
-    const basePixPerFrame = PX_PER_FRAME * parseFloat(speedSliderEl.value)
+    const basePixPerFrame = PX_PER_FRAME * parseFloat(pathSpeedSelectEl.value)
 
     function viewerSpeedAt(f: number): number {
       if (userSettings.effectsSpeedEnabled === false) return 1.0
@@ -1066,15 +1053,15 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     })
   }
 
-  // Both sliders are read out of the DOM inside `drawBounceX`, so a change is
+  // Both dropdowns are read out of the DOM inside `drawBounceX`, so a change is
   // invisible until a frame runs. In overlay mode zoom doesn't resize the
   // canvas, and speed never did — hence the explicit repaints.
-  on(zoomSliderEl, 'input', () => {
+  on(zoomSelectEl, 'change', () => {
     if (!isOverlay) resizeCanvas()
     else scheduleFrame()
   })
 
-  on(speedSliderEl, 'input', () => {
+  on(pathSpeedSelectEl, 'change', () => {
     scheduleFrame()
   })
 
@@ -1510,8 +1497,7 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     // drops a playlist back to 1× on its second track.
     video.defaultPlaybackRate = liveRate
     if (video.playbackRate !== liveRate) video.playbackRate = liveRate
-    rateSliderEl.value = String(rateIndex(liveRate))
-    rateValueEl.textContent = formatRate(liveRate)
+    rateSelectEl.value = String(liveRate)
   }
 
   function setPlaybackRate(rate: number) {
@@ -1524,8 +1510,8 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     savedRate !== null ? parseFloat(savedRate) : userSettings.defaultPlaybackRate,
   )
 
-  on(rateSliderEl, 'input', () =>
-    setPlaybackRate(rateAt(parseFloat(rateSliderEl.value))),
+  on(rateSelectEl, 'change', () =>
+    setPlaybackRate(clampRate(parseFloat(rateSelectEl.value))),
   )
 
   // The reset above is spec'd behaviour, but a browser that skipped it would
@@ -2045,9 +2031,9 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     document.body.classList.toggle('theater-classic', classic)
     document.body.classList.add('theater-mode')
     if (btnTheater) btnTheater.classList.add('active')
-    // Classic is the traditional layout, where the sidebar is part of the page;
-    // immersive keeps it out of the way until asked for.
-    setPlaylistDrawer(classic)
+    // Classic lays the sidebar out under the player as page content, so it has
+    // no drawer at all; immersive keeps it off screen until asked for.
+    setPlaylistDrawer(false)
     // Leaving immersive under a still pointer would leave it hidden.
     if (classic) document.body.classList.remove('pointer-active')
     requestAnimationFrame(() =>
@@ -2163,9 +2149,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
   syncFitControls()
 
   // ── Theater playlist drawer ─────────────────────────────────────────────────
-  // The sidebar is laid out by the page; theater only decides whether it is on
-  // screen. Always starts closed — theater exists to get the chrome out of the
-  // way — and `enterTheater` never opens it, so re-entering resets it.
+  // Immersive theater only: the sidebar is laid out by the page and theater
+  // decides whether it is on screen. Always starts closed — theater exists to
+  // get the chrome out of the way — and `enterTheater` never opens it, so
+  // re-entering resets it. Classic has no drawer; its sidebar is a column.
 
   function isDrawerOpen(): boolean {
     return document.body.classList.contains('theater-sidebar-open')
@@ -2195,8 +2182,15 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
       setFitPopover(false)
       enterTheater()
     }
-    // Unshifted only: Shift+P is the previous track.
-    if (key === 'p' && !e.shiftKey && isTheater && btnPlaylistDrawer) {
+    // Unshifted only: Shift+P is the previous track. Classic has no drawer, so
+    // the key is inert there rather than sliding a column that is already up.
+    if (
+      key === 'p' &&
+      !e.shiftKey &&
+      isTheater &&
+      !isClassicTheater() &&
+      btnPlaylistDrawer
+    ) {
       setPlaylistDrawer(!isDrawerOpen())
     }
     // Shifted, because plain F is fullscreen — the far more common request, and
@@ -2206,10 +2200,10 @@ export function createPlayerEngine(opts: PlayerEngineOptions): PlayerEngine {
     }
     if (e.key === 'Escape' && isTheater) {
       // Escape unwinds one layer at a time, innermost first, and only means
-      // "leave theater" once nothing is left on top of the picture.
-      // Classic's sidebar is a column beside the picture, not a layer on it.
+      // "leave theater" once nothing is left on top of the picture. The drawer
+      // is never open in classic, where the sidebar is page content.
       if (isFitPopoverOpen()) setFitPopover(false)
-      else if (isDrawerOpen() && !isClassicTheater()) setPlaylistDrawer(false)
+      else if (isDrawerOpen()) setPlaylistDrawer(false)
       else exitTheater()
     }
   })

@@ -2,13 +2,16 @@
 
 import { memo, type ReactNode } from 'react'
 
-import { DEFAULT_OVERLAY_BG_OPACITY } from '@/lib/player/constants'
+import {
+  BX_ZOOM_STEPS,
+  DEFAULT_OVERLAY_BG_OPACITY,
+  PATH_SPEED_STEPS,
+} from '@/lib/player/constants'
 import type { LoopMode, PlaylistLoopMode } from '@/lib/player/playback'
 import {
   NORMAL_PLAYBACK_RATE,
-  RATE_RANGE,
+  PLAYBACK_RATES,
   formatRate,
-  rateIndex,
 } from '@/lib/player/playbackRate'
 import { STRETCH_RANGE, ZOOM_RANGE } from '@/lib/player/theaterFit'
 
@@ -22,7 +25,7 @@ import { STRETCH_RANGE, ZOOM_RANGE } from '@/lib/player/theaterFit'
  * instead of leaving it holding stale child fibers.
  */
 
-/** Shared by the three inline slider captions in the secondary row. */
+/** Shared by the inline captions on the secondary row's controls. */
 const SLIDER_LABEL_STYLE = {
   fontFamily: 'var(--mono)',
   fontSize: '0.68rem',
@@ -64,6 +67,8 @@ type Props = {
    * Render the theater playlist-drawer toggle. It carries no handler: the
    * engine binds `#btnPlaylistDrawer` by id, the same way it owns theater and
    * fullscreen, so the drawer closes with theater without a second owner.
+   * Immersive theater only — classic lays the sidebar out as page content and
+   * hides this button, since there is nothing left for it to open.
    */
   hasPlaylistDrawer?: boolean
   /** What the drawer holds, for its tooltip: the playlist, or the watch page's tabs. */
@@ -408,15 +413,18 @@ function PlayerControls({
 
         <div className="volume-wrap zoom-wrap">
           <span style={SLIDER_LABEL_STYLE}>zoom</span>
-          <input
-            type="range"
-            className="zoom-slider"
-            id="zoomSlider"
-            min="0.05"
-            max="0.50"
-            step="0.05"
+          <select
+            className="ctrl-select"
+            id="zoomSelect"
             defaultValue="0.25"
-          />
+            aria-label="Path zoom"
+          >
+            {BX_ZOOM_STEPS.map((z) => (
+              <option key={z} value={z}>
+                {z.toFixed(2)}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* "path speed" in full, not "speed": it scales how fast the waveform
@@ -427,38 +435,41 @@ function PlayerControls({
           title="How fast the BounceX path scrolls past the playhead — this is not playback speed"
         >
           <span style={SLIDER_LABEL_STYLE}>path speed</span>
-          <input
-            type="range"
-            className="zoom-slider"
-            id="speedSlider"
-            min="0.5"
-            max="4.0"
-            step="0.25"
-            defaultValue="1.0"
-          />
+          <select
+            className="ctrl-select"
+            id="pathSpeedSelect"
+            defaultValue="1"
+            aria-label="Path speed"
+          >
+            {PATH_SPEED_STEPS.map((s) => (
+              <option key={s} value={s}>
+                {s}×
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Indexes the rate ladder rather than carrying a rate — see
-            `lib/player/playbackRate.ts`. The engine writes both the position
-            and the readout once the settings are read. */}
+        {/* Carries a rate, not a ladder index: a <select> has one option per
+            rung, so the uneven spacing that a range input could not express
+            (see `lib/player/playbackRate.ts`) costs nothing here. The engine
+            writes the selection once the settings are read. */}
         <div
           className="volume-wrap zoom-wrap"
           title="Playback speed ([ slower, ] faster, \ back to 1×)"
         >
           <span style={SLIDER_LABEL_STYLE}>speed</span>
-          <input
-            type="range"
-            className="zoom-slider"
-            id="playbackRateSlider"
-            min={RATE_RANGE.min}
-            max={RATE_RANGE.max}
-            step={RATE_RANGE.step}
-            defaultValue={rateIndex(NORMAL_PLAYBACK_RATE)}
+          <select
+            className="ctrl-select"
+            id="playbackRateSelect"
+            defaultValue={NORMAL_PLAYBACK_RATE}
             aria-label="Playback speed"
-          />
-          <span className="slider-value" id="playbackRateValue">
-            {formatRate(NORMAL_PLAYBACK_RATE)}
-          </span>
+          >
+            {PLAYBACK_RATES.map((r) => (
+              <option key={r} value={r}>
+                {formatRate(r)}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="volume-wrap">

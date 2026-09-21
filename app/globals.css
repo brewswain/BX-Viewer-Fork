@@ -1750,6 +1750,27 @@ body::after {
   cursor: pointer;
 }
 
+/* Dropdowns in the secondary control row (zoom, path speed, speed). Sized off
+   `.bx-select` so the bar reads as one family, tighter because these sit in a
+   row of captions rather than on their own. */
+.ctrl-select {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  padding: 0.22rem 0.4rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  outline: none;
+}
+
+.ctrl-select:hover,
+.ctrl-select:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ── Page Tabs ── */
 .page-tabs {
   display: flex;
@@ -2428,6 +2449,11 @@ body::after {
     min-width: 0;
   }
 
+  .ctrl-select {
+    flex: 1;
+    min-width: 0;
+  }
+
   /* Volume wrap (mute + slider): sits on line 1, pushed right */
   .volume-wrap:not(.zoom-wrap) {
     margin-left: auto;
@@ -3004,11 +3030,13 @@ body.theater-mode .bouncex-wrap.overlay-mode {
 
 /* ── Classic theater ─────────────────────────────────────────────────────────
    The YouTube-style alternative, layered on top of `theater-mode` so the engine
-   keeps its fit and strip sizing: header and page stay, the player fills the
-   height the header leaves, the bar is docked under it, the sidebar is a real
-   column (open by default, `theater-sidebar-open` collapses it) and the page
-   scrolls down to the title and description. Fullscreen from here falls back
-   to the plain theater rules, which is the stage fullscreen already expects.
+   keeps its fit and strip sizing: header and page stay, the player spans the
+   full width at the height the header leaves, the bar is docked under it, and
+   the page scrolls down to a two-column row with the title and description on
+   the left and the sidebar on the right. There is no drawer here — the sidebar
+   is page content, so the bar's toggle and P are hidden and inert. Fullscreen
+   from here falls back to the plain theater rules, which is the stage
+   fullscreen already expects.
    ------------------------------------------------------------------------- */
 
 body.theater-mode.theater-classic {
@@ -3025,6 +3053,8 @@ body.theater-mode.theater-classic .site-header {
 }
 body.theater-mode.theater-classic .video-info {
   display: block;
+  grid-column: 1;
+  min-width: 0;
 }
 
 body.theater-mode.theater-classic .player-layout {
@@ -3033,11 +3063,16 @@ body.theater-mode.theater-classic .player-layout {
   padding: 1rem 1.5rem 2rem !important;
 }
 
-body.theater-mode.theater-classic:not(.theater-sidebar-open) .player-layout {
-  grid-template-columns: minmax(0, 1fr);
+/* `display: contents` dissolves the wrapper so the player, the title block and
+   the sidebar are all items of one grid — the only way the player can span
+   both columns while the sidebar sits beside the title rather than beside the
+   picture. Safe because `.player-main` carries no box of its own. */
+body.theater-mode.theater-classic .player-main {
+  display: contents;
 }
 
 body.theater-mode.theater-classic #playerContainer:not(.fullscreen-active) {
+  grid-column: 1 / -1;
   position: relative;
   inset: auto;
   z-index: auto;
@@ -3059,6 +3094,7 @@ body.theater-mode.theater-classic #playerContainer:not(.fullscreen-active) .play
 }
 
 body.theater-mode.theater-classic .player-sidebar {
+  grid-column: 2;
   position: static;
   width: auto;
   padding: 0;
@@ -3071,12 +3107,10 @@ body.theater-mode.theater-classic .player-sidebar {
   transition: none;
 }
 
-body.theater-mode.theater-classic:not(.theater-sidebar-open) .player-sidebar {
-  display: none;
-}
-
-/* The control-bar button and P collapse it; the drawer's own × is overlay UI. */
-body.theater-mode.theater-classic .theater-sidebar-close {
+/* Nothing to toggle: the sidebar is always on the page here, so the drawer's
+   own × and the control-bar button that opens it are both out. */
+body.theater-mode.theater-classic .theater-sidebar-close,
+body.theater-mode.theater-classic #btnPlaylistDrawer {
   display: none;
 }
 
@@ -3088,6 +3122,11 @@ body.theater-mode.theater-classic .bouncex-wrap .bx-poppers-badge {
 @media (max-width: 1100px) {
   body.theater-mode.theater-classic .player-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* One column: the sidebar stacks under the title block instead of beside it,
+     and has to give up the second-column placement or it would create one. */
+  body.theater-mode.theater-classic .player-sidebar {
+    grid-column: 1;
   }
 }
 
