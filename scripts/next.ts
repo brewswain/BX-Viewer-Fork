@@ -6,7 +6,7 @@
  * Usage: bun run scripts/next.ts <build|dev|start> [...args]
  */
 import { spawn } from 'node:child_process'
-import { readlinkSync } from 'node:fs'
+import { existsSync, readlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +21,13 @@ function readlinkReportsEisdir(): boolean {
 
 const env = { ...process.env }
 const args = process.argv.slice(2)
+
+// Bun has already read .env.local. A library on an unplugged drive or an
+// unsynced folder would otherwise just show up as an empty browse page.
+const media = env.BX_MEDIA_DIR?.trim()
+if (media && !existsSync(`${media}/videos`)) {
+  console.warn(`BX_MEDIA_DIR is ${media}, but it has no videos folder. The library will be empty.`)
+}
 
 if (readlinkReportsEisdir()) {
   // Forward slashes: NODE_OPTIONS treats backslashes inside quotes as escapes,

@@ -1,13 +1,19 @@
 import path from 'node:path'
 
-/**
- * Repo root. Next runs with cwd = project root, which is also where
- * videos/, playlists/ and config.json live.
- */
+/** Repo root. Next runs with cwd = project root, which is where config.json lives. */
 export const ROOT = process.cwd()
 
-export const VIDEO_BASE = path.join(ROOT, 'videos')
-export const PLAYLIST_BASE = path.join(ROOT, 'playlists')
+/**
+ * Where videos/ and playlists/ live. The repo root unless BX_MEDIA_DIR (set in
+ * .env.local, per machine) points elsewhere, so the library can sit on another
+ * drive or in a synced folder without the checkout moving with it.
+ */
+export const MEDIA_ROOT = process.env.BX_MEDIA_DIR?.trim()
+  ? path.resolve(ROOT, process.env.BX_MEDIA_DIR.trim())
+  : ROOT
+
+export const VIDEO_BASE = path.join(MEDIA_ROOT, 'videos')
+export const PLAYLIST_BASE = path.join(MEDIA_ROOT, 'playlists')
 export const CONFIG_PATH = path.join(ROOT, 'config.json')
 
 export const VIDEO_MANIFEST = path.join(VIDEO_BASE, 'manifest.json')

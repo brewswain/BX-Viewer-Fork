@@ -1,6 +1,7 @@
 /**
  * Rewrites every video and playlist meta.json onto the tag vocabulary in
- * lib/browse/facets.ts. The library is gitignored, so this has to run once on
+ * lib/browse/facets.ts, under BX_MEDIA_DIR when set. The library is gitignored,
+ * so unless a sync carries the meta.json files over, this has to run once on
  * each machine (and again after an import brings in raw tags). Idempotent.
  *
  *   bun run retag          apply
@@ -10,12 +11,13 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { normalizeTags } from '../lib/browse/facets'
+import { MEDIA_ROOT } from '../lib/paths'
 
 const dry = process.argv.includes('--dry')
 let changed = 0
 
 for (const base of ['videos', 'playlists']) {
-  const dir = join(process.cwd(), base)
+  const dir = join(MEDIA_ROOT, base)
   if (!existsSync(dir)) continue
   for (const folder of readdirSync(dir)) {
     const file = join(dir, folder, 'meta.json')

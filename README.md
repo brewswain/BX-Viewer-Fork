@@ -147,6 +147,16 @@ playlists/
 
 Neither `manifest.json` ships with the repo — `videos/` and `playlists/` are gitignored, so your library stays yours. The manager writes them on your first import, and until then a fresh install just shows an empty library rather than an error.
 
+### Keeping the library outside the repo
+
+By default `videos/` and `playlists/` sit in the repo folder. To keep them somewhere else (another drive, or a folder a sync tool like Syncthing shares between machines), create `.env.local` in the repo root, which is gitignored and so set per machine:
+
+```
+BX_MEDIA_DIR=F:/BX-Library
+```
+
+Point it at the folder that contains `videos/` and `playlists/`, using forward slashes. Restart the server afterwards; the launcher warns at startup if the folder has no `videos/` in it (an unplugged drive, say). Imports and `bun run retag` follow the same setting.
+
 Each `manifest.json` is a plain JSON array of folder names, and it controls both **visibility and display order** — a folder that isn't listed in the manifest won't show up at all:
 
 ```json
