@@ -559,6 +559,25 @@ body {
   border-color: rgba(61, 214, 200, 0.55);
 }
 
+/* Same colours as the queue's `.queue-diff` chip: teal, amber, orange, red. */
+.card-tag-diff.diff-easy {
+  color: var(--teal);
+  background: var(--teal-glow);
+  border-color: rgba(61, 214, 200, 0.35);
+}
+
+.card-tag-diff.diff-hard {
+  color: var(--accent2);
+  background: transparent;
+  border-color: var(--accent2);
+}
+
+.card-tag-diff.diff-extreme {
+  color: var(--red);
+  background: rgba(232, 85, 85, 0.1);
+  border-color: rgba(232, 85, 85, 0.45);
+}
+
 .card-tag-count {
   font-size: 0.58rem;
   line-height: 1;

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 
 import { isPlainClick, usePlay } from '@/components/queue/PlayGate'
 import QueueMenu from '@/components/queue/QueueMenu'
+import { LEVELS, levelRange } from '@/lib/queue/radio'
 
 export type VideoMeta = {
   /** Manifest folder id, stamped on at fetch time (legacy `_folder`). */
@@ -154,7 +155,11 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
         ? framesToTimecode(video.duration)
         : null
 
-  const highlights = (video.highlightedTags || []).slice(0, 3)
+  // Difficulty has its own pill, so it never also spends a highlight slot.
+  const range = levelRange(video.tags)
+  const highlights = (video.highlightedTags || [])
+    .filter((t) => !(LEVELS as readonly string[]).includes(t))
+    .slice(0, 3)
   const popCycles = video.poppersCycles || 0
 
   const [thumbFailed, setThumbFailed] = useState(false)
@@ -205,9 +210,17 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
       </div>
       <div className="card-body">
         <div className="card-highlight-tags">
-          {/* First, so it lands in the same place on every card whatever the
-              highlights are, and so a card with three of them cannot push it
-              onto a second line. */}
+          {/* Difficulty and poppers first, so they land in the same place on
+              every card whatever the highlights are, and so a card with three
+              of them cannot push these onto a second line. Coloured by the top
+              of the range, like the queue's difficulty chip. */}
+          {range && (
+            <span className={`card-tag card-tag-diff diff-${LEVELS[range[1]]}`}>
+              {range[0] === range[1]
+                ? LEVELS[range[0]]
+                : `${LEVELS[range[0]]} to ${LEVELS[range[1]]}`}
+            </span>
+          )}
           {popCycles > 0 && (
             <span
               className="card-tag card-tag-poppers"
