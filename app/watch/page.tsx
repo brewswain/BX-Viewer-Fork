@@ -10,10 +10,14 @@
  */
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import DevicePanel from '@/components/player/DevicePanel'
+import QueueMenu from '@/components/queue/QueueMenu'
+import QueuePanel from '@/components/queue/QueuePanel'
+import { upcoming } from '@/lib/queue/queue'
+import { getQueue, queueHref, useQueue } from '@/lib/queue/store'
 import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
@@ -84,7 +88,14 @@ function WatchInner() {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [activeBxIndex, setActiveBxIndex] = useState(0)
-  const [sidebarTab, setSidebarTab] = useState<'bx' | 'more'>('more')
+  const [sidebarTab, setSidebarTab] = useState<'bx' | 'more' | 'queue'>('more')
+  const queueLeft = upcoming(useQueue()).length
+  // The engine's `onEnded` is built once per video; a ref keeps it off a stale router.
+  const router = useRouter()
+  const routerRef = useRef(router)
+  useEffect(() => {
+    routerRef.current = router
+  }, [router])
   const [stats, setStats] = useState<{ duration: string; frames: string }>({
     duration: '–',
     frames: '–',
@@ -550,11 +561,16 @@ function WatchInner() {
       onEnded() {
         // `forever` loops the element itself (gapless) and never fires `ended`;
         // `once` has to be counted, which is exactly what this event is for.
-        if (loopModeRef.current !== 'once' || loopsUsedRef.current >= 1) return
-        loopsUsedRef.current += 1
-        video!.currentTime = 0
-        engine.resetSmoothTime()
-        void video!.play().catch(() => {})
+        if (loopModeRef.current === 'once' && loopsUsedRef.current < 1) {
+          loopsUsedRef.current += 1
+          video!.currentTime = 0
+          engine.resetSmoothTime()
+          void video!.play().catch(() => {})
+          return
+        }
+        // Done with this video: carry on into the queue if anything waits there.
+        const next = upcoming(getQueue())[0]
+        if (next) routerRef.current.push(queueHref(next.uid))
       },
     })
     engineRef.current = engine
@@ -813,7 +829,18 @@ function WatchInner() {
                 </span>
               ))}
             </div>
-            <h1 className="video-title">{meta.title || id}</h1>
+            <div className="video-title-row">
+              <h1 className="video-title">{meta.title || id}</h1>
+              <QueueMenu
+                video={{
+                  folder: id,
+                  title: meta.title,
+                  thumbnail: meta.thumbnail,
+                  tags: meta.tags,
+                  durationSecs: meta.durationSecs,
+                }}
+              />
+            </div>
             <div className="video-creator-row">
               <div className="video-creator">
                 <span className="video-creator-label">Video Creator</span>
@@ -903,6 +930,14 @@ function WatchInner() {
               onClick={() => setSidebarTab('more')}
             >
               More Videos
+            </button>
+            <button
+              className={sidebarTab === 'queue' ? 'sidebar-tab active' : 'sidebar-tab'}
+              id="sidebarTabQueue"
+              onClick={() => setSidebarTab('queue')}
+            >
+              Queue
+              {queueLeft > 0 && <span className="header-nav-badge">{queueLeft}</span>}
             </button>
           </div>
 
@@ -1036,6 +1071,13 @@ function WatchInner() {
               <MoreVideos suggestions={suggestions} />
             </div>
           </div>
+
+          <div
+            className={sidebarTab === 'queue' ? 'sidebar-panel active' : 'sidebar-panel'}
+            id="sidebarPanelQueue"
+          >
+            <QueuePanel />
+          </div>
         </aside>
       </div>
     </>
@@ -1126,6 +1168,16 @@ function MoreVideos({ suggestions }: { suggestions: Suggestions }) {
                 ) : null}
               </div>
             </div>
+            <QueueMenu
+              className="more-video-queue-menu"
+              video={{
+                folder,
+                title: m.title,
+                thumbnail: m.thumbnail,
+                tags: m.tags,
+                durationSecs: m.durationSecs,
+              }}
+            />
           </Link>
         )
       })}

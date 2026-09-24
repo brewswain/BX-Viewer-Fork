@@ -2,6 +2,28 @@
 
 import Link from 'next/link'
 
+import QueueDrawer from '@/components/queue/QueueDrawer'
+import { setQueueDrawerOpen, useQueueDrawerOpen } from '@/components/queue/queueUi'
+import { upcoming } from '@/lib/queue/queue'
+import { useQueue } from '@/lib/queue/store'
+
+/** Badge counts what is still to play, since played rows stay in the queue. */
+function QueueButton() {
+  const queue = useQueue()
+  const open = useQueueDrawerOpen()
+  const left = upcoming(queue).length
+  return (
+    <button
+      className={open ? 'header-nav-queue active' : 'header-nav-queue'}
+      onClick={() => setQueueDrawerOpen(!open)}
+      title="Queue"
+    >
+      Queue
+      {left > 0 && <span className="header-nav-badge">{left}</span>}
+    </button>
+  )
+}
+
 export type NavKey = 'browse' | 'about' | 'settings' | 'manager' | null
 
 type Props = {
@@ -100,7 +122,9 @@ export default function SiteHeader({
             {label}
           </Link>
         ))}
+        <QueueButton />
       </nav>
+      <QueueDrawer />
     </header>
   )
 }

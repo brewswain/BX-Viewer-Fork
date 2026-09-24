@@ -5974,3 +5974,509 @@ body:has(.manager-layout) {
     gap: 0.8rem;
   }
 }
+
+/* ── Queue: ⋯ menu, panel, drawer ── */
+.queue-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(10, 11, 15, 0.72);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+}
+
+.queue-menu-btn:hover,
+.queue-menu-btn.open {
+  background: var(--surface2);
+  border-color: var(--border2);
+}
+
+.queue-menu-flash {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  white-space: nowrap;
+  color: var(--accent);
+  padding: 0 0.2rem;
+}
+
+/* On cards it floats over the thumbnail's top-right corner, shown on hover so
+   the grid stays clean. Always visible on touch screens, which have no hover. */
+.card-queue-menu,
+.more-video-queue-menu {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 2;
+  opacity: 0;
+}
+
+.video-card:hover .card-queue-menu,
+.more-video-card:hover .more-video-queue-menu,
+.card-queue-menu.open,
+.more-video-queue-menu.open,
+.card-queue-menu:focus-visible,
+.more-video-queue-menu:focus-visible,
+.card-queue-menu:has(.queue-menu-flash),
+.more-video-queue-menu:has(.queue-menu-flash) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .card-queue-menu,
+  .more-video-queue-menu {
+    opacity: 1;
+  }
+}
+
+.more-video-card {
+  position: relative;
+}
+
+.video-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.video-title-row .video-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-title-row .queue-menu-btn {
+  margin-top: 0.3rem;
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.queue-menu {
+  position: fixed;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  padding: 0.3rem;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.queue-menu button {
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 0.65rem;
+  cursor: pointer;
+}
+
+.queue-menu button:hover {
+  background: var(--surface2);
+}
+
+.queue-menu-sub {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 0.2rem 0.6rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--border);
+}
+
+.queue-menu-sub button {
+  font-size: 0.8rem;
+  color: var(--text2);
+  padding: 0.35rem 0.55rem;
+}
+
+.queue-menu-note {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text3);
+  padding: 0.35rem 0.65rem;
+}
+
+.queue-menu-note.error,
+.queue-save-error {
+  color: var(--red);
+}
+
+.queue-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.25rem 0.2rem;
+}
+
+/* Header button + the count badge it shares with the watch page's tab. */
+.header-nav-queue {
+  font-size: 0.78rem;
+  font-family: var(--mono);
+  color: var(--text3);
+  background: none;
+  border: none;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+
+.header-nav-queue:hover,
+.header-nav-queue.active {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.header-nav-badge {
+  display: inline-block;
+  min-width: 1.3em;
+  padding: 0 0.35em;
+  margin-left: 0.3em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.queue-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.queue-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2500;
+  width: min(400px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.5);
+  padding: 0 1rem 1rem;
+  overflow-y: auto;
+}
+
+.queue-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0 0.75rem;
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 1;
+}
+
+.queue-drawer-close {
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+
+.queue-drawer-close:hover {
+  color: var(--text);
+}
+
+.queue-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.queue-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.queue-count {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text3);
+  letter-spacing: 0.04em;
+}
+
+.queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.queue-btn {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--text2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.queue-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+.queue-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.queue-btn.primary {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.queue-btn.primary:hover:not(:disabled) {
+  color: var(--bg);
+  background: var(--accent2);
+}
+
+.queue-btn.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.queue-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.queue-save input {
+  flex: 1;
+  min-width: 140px;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.55rem;
+}
+
+.queue-save-error {
+  flex-basis: 100%;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+
+.queue-save-done {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text2);
+}
+
+.queue-save-done a {
+  color: var(--accent);
+}
+
+.queue-empty {
+  font-size: 0.82rem;
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-section {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 0.6rem 0 0.25rem;
+  text-align: left;
+  background: none;
+  border: none;
+}
+
+.queue-section.toggle {
+  cursor: pointer;
+}
+
+.queue-section.toggle:hover {
+  color: var(--text2);
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem;
+  border-radius: var(--radius);
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  user-select: none;
+}
+
+.queue-row:hover {
+  background: var(--surface);
+}
+
+.queue-row.now {
+  background: var(--surface);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.queue-row.now .queue-row-title {
+  color: var(--accent);
+}
+
+.queue-row.played {
+  opacity: 0.5;
+}
+
+.queue-row.dragging {
+  opacity: 0.35;
+}
+
+.queue-row.drop-before {
+  border-top-color: var(--accent);
+}
+
+.queue-row.drop-after {
+  border-bottom-color: var(--accent);
+}
+
+.queue-row-thumb {
+  width: 64px;
+  aspect-ratio: 16/9;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface2);
+  position: relative;
+}
+
+.queue-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.queue-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-row-title {
+  font-size: 0.82rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-row-meta {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text3);
+  margin-top: 0.15rem;
+}
+
+.queue-diff {
+  padding: 0 0.35rem;
+  border-radius: 3px;
+  border: 1px solid var(--border2);
+  color: var(--text2);
+}
+
+.queue-diff.diff-easy {
+  color: var(--teal);
+  border-color: var(--teal);
+}
+
+.queue-diff.diff-medium {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.queue-diff.diff-hard {
+  color: var(--accent2);
+  border-color: var(--accent2);
+}
+
+.queue-diff.diff-extreme {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.queue-row-remove {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.queue-row:hover .queue-row-remove,
+.queue-row-remove:focus-visible {
+  opacity: 1;
+}
+
+.queue-row-remove:hover {
+  color: var(--red);
+}
+
+@media (hover: none) {
+  .queue-row-remove {
+    opacity: 1;
+  }
+}

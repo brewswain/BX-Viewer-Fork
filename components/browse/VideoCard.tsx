@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import QueueMenu from '@/components/queue/QueueMenu'
+
 export type VideoMeta = {
   /** Manifest folder id, stamped on at fetch time (legacy `_folder`). */
   _folder?: string
@@ -185,6 +187,16 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
         ) : (
           <ThumbPlaceholder />
         )}
+        <QueueMenu
+          className="card-queue-menu"
+          video={{
+            folder,
+            title: video.title,
+            thumbnail: video.thumbnail,
+            tags: video.tags,
+            durationSecs: video.durationSecs,
+          }}
+        />
       </div>
       <div className="card-body">
         <div className="card-highlight-tags">

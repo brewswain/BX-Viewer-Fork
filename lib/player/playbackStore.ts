@@ -94,6 +94,16 @@ export function setTrackCount(count: number): void {
 }
 
 /**
+ * The queue player's list changed under a playing track (added, reordered or
+ * removed from another tab). Always sequential: the queue's order is the point.
+ * `position` may be -1 when the playing row was removed, so that the next
+ * advance lands on whatever took its place.
+ */
+export function reshapeTracks(count: number, currentIndex: number, position: number): void {
+  set({ order: sequentialOrder(count), currentIndex, position })
+}
+
+/**
  * Record which track is playing. `position` is derived from the order rather
  * than incremented, because a track reached by clicking the sidebar is not
  * necessarily the next one in play order.

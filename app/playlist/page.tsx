@@ -9,10 +9,20 @@
  */
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 
 import DevicePanel from '@/components/player/DevicePanel'
+import QueueMenu from '@/components/queue/QueueMenu'
+import QueuePanel from '@/components/queue/QueuePanel'
+import { upcoming } from '@/lib/queue/queue'
+import {
+  getQueue,
+  QUEUE_PLAYLIST_ID,
+  queueHref,
+  setQueueCurrent,
+  useQueue,
+} from '@/lib/queue/store'
 import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
@@ -44,6 +54,7 @@ import {
   getPlaybackState,
   initPlayback,
   noteRepeat,
+  reshapeTracks,
   reshuffle,
   setCurrentTrack,
   setTrackCount,
@@ -63,7 +74,36 @@ import { deviceConfigFromSettings, getSettings } from '@/lib/settings'
 
 type TrackMeta = VideoMeta & { _folder: string; _bxFile: string | null }
 
-type Loaded = { id: string; playlist: PlaylistMeta; metas: TrackMeta[] }
+/** `uids` is set only for the queue: the queue row behind each track index. */
+type Loaded = { id: string; playlist: PlaylistMeta; metas: TrackMeta[]; uids?: string[] }
+
+const QUEUE_TITLE = 'Queue'
+
+/**
+ * A folder id to a track meta. A curated playlist naming a video that won't load
+ * is an error worth showing. The library-wide list and the queue are assembled
+ * by hand, where one folder missing its meta.json must not take the rest down
+ * with it, so those get the same synthesised default the browse page uses.
+ */
+async function trackMeta(
+  folder: string,
+  bxFile: string | null,
+  tolerant: boolean,
+): Promise<TrackMeta> {
+  try {
+    const m = await fetchJSON<VideoMeta>(`${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`)
+    return { ...m, _folder: folder, _bxFile: bxFile }
+  } catch (e) {
+    if (!tolerant) throw e
+    return {
+      title: folder,
+      videoFile: `${folder}.mp4`,
+      bxFiles: [{ label: 'Default', file: `${folder}.bx` }],
+      _folder: folder,
+      _bxFile: bxFile,
+    }
+  }
+}
 
 type BxSelectState = {
   folder: string
@@ -102,8 +142,29 @@ function descriptionParagraphs(meta: VideoMeta | undefined): string[] {
 function PlaylistInner() {
   const searchParams = useSearchParams()
   const playlistId = searchParams.get('p')
+  const isQueue = playlistId === QUEUE_PLAYLIST_ID
+  /** Queue row to start on, from the panel or the watch page's hand-off. */
+  const atUid = searchParams.get('at')
 
   const [loaded, setLoaded] = useState<Loaded | null>(null)
+  /**
+   * The engine is built once per load, not per `loaded` change: the queue
+   * rewrites `loaded` whenever another tab edits it, and rebuilding the engine
+   * then would restart the video. `loadedRef` is what the engine reads.
+   */
+  const loadedRef = useRef<Loaded | null>(null)
+  const [engineKey, setEngineKey] = useState(0)
+  const [reloadNonce, setReloadNonce] = useState(0)
+  // The track that is actually playing. Kept apart from `metas[currentIndex]`
+  // because the queue can drop the playing row while it plays.
+  const [playingMeta, setPlayingMeta] = useState<TrackMeta | null>(null)
+  const atUidRef = useRef(atUid)
+  const queue = useQueue()
+  const router = useRouter()
+  const routerRef = useRef(router)
+  useEffect(() => {
+    routerRef.current = router
+  }, [router])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [emptyPlaylist, setEmptyPlaylist] = useState(false)
   const [bxSelect, setBxSelect] = useState<BxSelectState>(null)
@@ -135,6 +196,8 @@ function PlaylistInner() {
     let cancelled = false
 
     setLoaded(null)
+    loadedRef.current = null
+    setPlayingMeta(null)
     setErrorMsg(null)
     setEmptyPlaylist(false)
     setBxSelect(null)
@@ -158,42 +221,17 @@ function PlaylistInner() {
       }
     }
 
-    /**
-     * A curated playlist naming a video that won't load is an error worth
-     * showing. The library-wide one is assembled from the manifest, where one
-     * folder missing its meta.json must not take the other two hundred down
-     * with it — so it gets the same synthesised default the browse page uses.
-     */
-    async function trackMeta(
-      folder: string,
-      bxFile: string | null,
-      tolerant: boolean,
-    ): Promise<TrackMeta> {
-      try {
-        const m = await fetchJSON<VideoMeta>(
-          `${VIDEO_BASE}/${encodeURIComponent(folder)}/meta.json`,
-        )
-        return { ...m, _folder: folder, _bxFile: bxFile }
-      } catch (e) {
-        if (!tolerant) throw e
-        return {
-          title: folder,
-          videoFile: `${folder}.mp4`,
-          bxFiles: [{ label: 'Default', file: `${folder}.bx` }],
-          _folder: folder,
-          _bxFile: bxFile,
-        }
-      }
-    }
-
     async function loadPlaylist(id: string) {
       const quick = id === QUICK_PLAYLIST_ID
+      const queue = id === QUEUE_PLAYLIST_ID ? getQueue() : null
       try {
-        const playlist = quick
-          ? await quickPlaylistMeta()
-          : await fetchJSON<PlaylistMeta>(
-              `${PLAYLIST_BASE}/${encodeURIComponent(id)}/meta.json`,
-            )
+        const playlist: PlaylistMeta = queue
+          ? { title: QUEUE_TITLE, videos: queue.items.map((i) => i.folder) }
+          : quick
+            ? await quickPlaylistMeta()
+            : await fetchJSON<PlaylistMeta>(
+                `${PLAYLIST_BASE}/${encodeURIComponent(id)}/meta.json`,
+              )
         const videos = playlist.videos || []
 
         if (videos.length === 0) {
@@ -208,14 +246,17 @@ function PlaylistInner() {
             ) as string
             const bxOverride =
               typeof entry === 'string' ? null : entry.bxFile || null
-            return trackMeta(folder, bxOverride, quick)
+            return trackMeta(folder, bxOverride, quick || !!queue)
           }),
         )
 
         document.title = `${playlist.title || id} — BounceX Viewer`
 
         if (cancelled) return
-        setLoaded({ id, playlist, metas })
+        const next: Loaded = { id, playlist, metas, uids: queue?.items.map((i) => i.uid) }
+        loadedRef.current = next
+        setLoaded(next)
+        setEngineKey((k) => k + 1)
       } catch (e) {
         if (cancelled) return
         setErrorMsg((e as Error).message)
@@ -227,20 +268,21 @@ function PlaylistInner() {
     return () => {
       cancelled = true
     }
-  }, [playlistId])
+  }, [playlistId, reloadNonce])
 
   // ── Engine + track loading ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!loaded) return
+    const first = loadedRef.current
+    if (!first || engineKey === 0) return
     const video = videoRef.current
     const canvas = canvasRef.current
     const bxWrap = bxWrapRef.current
     if (!video || !canvas || !bxWrap) return
 
-    const { metas } = loaded
+    const metasNow = () => loadedRef.current?.metas ?? first.metas
     const userSettings = getSettings()
 
-    setTrackCount(metas.length)
+    setTrackCount(first.metas.length)
 
     const deviceConfig = deviceConfigFromSettings(userSettings)
     deviceManager.configure(deviceConfig)
@@ -265,7 +307,14 @@ function PlaylistInner() {
           trackLoop: now.prefs.tracks[now.currentFolder] || 'off',
           repeatsUsed: now.repeatsUsed,
         })
-        if (result.action === 'stop') return
+        if (result.action === 'stop') {
+          // A finished playlist carries on into the queue. The queue itself
+          // just stops, keeping everything that was in it.
+          if (first.uids) return
+          const next = upcoming(getQueue())[0]
+          if (next) routerRef.current.push(queueHref(next.uid))
+          return
+        }
         if (result.action === 'repeat') {
           noteRepeat()
           video!.currentTime = 0
@@ -273,7 +322,7 @@ function PlaylistInner() {
           void video!.play().catch(() => {})
           return
         }
-        if (result.wrapped && now.prefs.shuffle) reshuffle(metas.length)
+        if (result.wrapped && now.prefs.shuffle) reshuffle(metasNow().length)
         loadTrack(getPlaybackState().order[result.position])
       },
       onFrame(curFrame) {
@@ -292,11 +341,15 @@ function PlaylistInner() {
     // every later call comes from the user advancing or from `onEnded`, where
     // playback is already under way and stopping between tracks would be wrong.
     async function loadTrack(index: number, autoplay = true) {
-      const meta = metas[index]
+      const meta = metasNow()[index]
+      if (!meta) return
       const folder = meta._folder
       // Title / authors / description / track counters, the active row, and the
       // loop button's "current track" all re-render from this.
       setCurrentTrack(index, folder)
+      setPlayingMeta(meta)
+      const uid = loadedRef.current?.uids?.[index]
+      if (uid) setQueueCurrent(uid)
 
       // Highlight active track in the sidebar list
       const activeEl = document.getElementById(`ptrack-${index}`)
@@ -366,8 +419,11 @@ function PlaylistInner() {
     loadTrackRef.current = loadTrack
 
     // ── Start first track ─────────────────────────────────────────────────────
+    // The queue starts on the row it was opened at, else resumes where it was.
+    const startUid = first.uids ? (atUidRef.current ?? getQueue().current) : null
+    const startAt = startUid ? (first.uids?.indexOf(startUid) ?? -1) : -1
     loadTrack(
-      getPlaybackState().order[0] ?? 0,
+      startAt >= 0 ? startAt : (getPlaybackState().order[0] ?? 0),
       shouldAutoplay(deviceConfig, deviceManager.isConnected()),
     )
 
@@ -378,7 +434,77 @@ function PlaylistInner() {
       // The manager outlives this page; leaving it must stop the machine.
       deviceManager.clearMarkers()
     }
-  }, [loaded])
+  }, [engineKey])
+
+  // ── Queue: follow edits made from this or any other tab ────────────────────
+  useEffect(() => {
+    atUidRef.current = atUid
+    // A new `at` on the page already playing the queue (the header drawer's
+    // Play) jumps there rather than reloading.
+    const idx = atUid ? (loadedRef.current?.uids?.indexOf(atUid) ?? -1) : -1
+    if (idx >= 0) loadTrackRef.current?.(idx)
+  }, [atUid])
+
+  useEffect(() => {
+    if (!isQueue) return
+    // Opened on an empty queue: come alive as soon as something is added.
+    if (emptyPlaylist) {
+      if (queue.items.length > 0) setReloadNonce((n) => n + 1)
+      return
+    }
+    const cur = loadedRef.current
+    if (!cur?.uids) return
+    const nextUids = queue.items.map((i) => i.uid)
+    if (nextUids.length === cur.uids.length && nextUids.every((u, i) => u === cur.uids![i]))
+      return
+
+    const oldUids = cur.uids
+    let cancelled = false
+    void (async () => {
+      const byUid = new Map(oldUids.map((u, i) => [u, cur.metas[i]]))
+      const metas = await Promise.all(
+        queue.items.map((it) => byUid.get(it.uid) ?? trackMeta(it.folder, null, true)),
+      )
+      if (cancelled) return
+      const next: Loaded = {
+        ...cur,
+        playlist: { ...cur.playlist, videos: queue.items.map((i) => i.folder) },
+        metas,
+        uids: nextUids,
+      }
+      loadedRef.current = next
+      setLoaded(next)
+
+      // Keep the playing row playing, wherever it moved to.
+      const { currentIndex: oldIdx } = getPlaybackState()
+      const playingUid = oldUids[oldIdx]
+      const newIdx = nextUids.indexOf(playingUid)
+      const survivorsBefore = oldUids.slice(0, oldIdx).filter((u) => nextUids.includes(u)).length
+      const position = newIdx >= 0 ? newIdx : survivorsBefore - 1
+      reshapeTracks(metas.length, newIdx, position)
+      // The queue had run dry and something new arrived: carry on with it, the
+      // same as if it had been there when the last video ended.
+      if (videoRef.current?.ended && !videoRef.current.loop && position + 1 < metas.length)
+        loadTrackRef.current?.(position + 1)
+
+      // Variant picks are keyed by index, so they follow their rows.
+      const remapped: Record<number, string> = {}
+      for (const [i, file] of Object.entries(bxOverridesRef.current)) {
+        const to = nextUids.indexOf(oldUids[Number(i)])
+        if (to >= 0) remapped[to] = file
+      }
+      bxOverridesRef.current = remapped
+      setBxOverrides(remapped)
+      setBxSelect((s) => {
+        if (!s) return s
+        const to = nextUids.indexOf(oldUids[s.trackIndex])
+        return to >= 0 ? { ...s, trackIndex: to } : null
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isQueue, queue, emptyPlaylist])
 
   // ── Loop / shuffle ──────────────────────────────────────────────────────────
 
@@ -483,9 +609,11 @@ function PlaylistInner() {
         <SiteHeader />
         <div id="playerLayout" className="player-layout">
           <div className="error-msg">
-            {playlistId === QUICK_PLAYLIST_ID
-              ? 'There are no videos to play.'
-              : 'This playlist has no videos.'}
+            {isQueue
+              ? 'The queue is empty. Use the ⋯ button on any video to add it; this page starts playing as soon as you do.'
+              : playlistId === QUICK_PLAYLIST_ID
+                ? 'There are no videos to play.'
+                : 'This playlist has no videos.'}
           </div>
         </div>
       </>
@@ -502,7 +630,7 @@ function PlaylistInner() {
   }
 
   const { id, playlist, metas } = loaded
-  const current = metas[currentIndex] ?? metas[0]
+  const current = playingMeta ?? metas[0]
 
   // The sidebar is the answer to "what plays next", so it lists tracks in play
   // order rather than playlist order — shuffling reorders the rows, and turning
@@ -555,7 +683,7 @@ function PlaylistInner() {
               hasPlaylistDrawer
               loopMode={barLoopMode(prefs, currentFolder)}
               onCycleLoop={cycleLoop}
-              shuffle={prefs.shuffle}
+              shuffle={isQueue ? null : prefs.shuffle}
               onToggleShuffle={() => toggleShuffle(metas.length)}
               totalCount={metas.length}
               trackDisplay={trackDisplay}
@@ -566,9 +694,20 @@ function PlaylistInner() {
           </div>
 
           <div className="video-info">
-            <h1 className="video-title" id="plCurrentTitle">
-              {current.title || current._folder}
-            </h1>
+            <div className="video-title-row">
+              <h1 className="video-title" id="plCurrentTitle">
+                {current.title || current._folder}
+              </h1>
+              <QueueMenu
+                video={{
+                  folder: current._folder,
+                  title: current.title,
+                  thumbnail: current.thumbnail,
+                  tags: current.tags,
+                  durationSecs: current.durationSecs,
+                }}
+              />
+            </div>
             <div className="video-creator-row" id="plCurrentAuthors">
               <div className="video-creator">
                 <span className="video-creator-label">Video Creator</span>
@@ -640,6 +779,18 @@ function PlaylistInner() {
 
           <DevicePanel />
 
+          {isQueue ? (
+            <div className="sidebar-section">
+              <div className="sidebar-title">Queue</div>
+              <QueuePanel
+                isPlayer
+                onPlay={(uid) => {
+                  const idx = loadedRef.current?.uids?.indexOf(uid) ?? -1
+                  if (idx >= 0) loadTrackRef.current?.(idx)
+                }}
+              />
+            </div>
+          ) : (
           <div className="sidebar-section">
             <div className="sidebar-title">
               {`${playlist.title || 'Playlist'} — ${metas.length} videos`}
@@ -699,6 +850,7 @@ function PlaylistInner() {
               })}
             </div>
           </div>
+          )}
 
           <OssmExportPanel
             items={ossmItems}
