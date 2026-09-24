@@ -38,11 +38,14 @@ export type RadioCandidate = {
 /**
  * Difficulty tags in the taste set the wave's range; with none picked it spans
  * everything. One cycle: build a step at a time up to just below the top, hold
- * there once more, rest one level under the floor, then the top.
+ * there once more, rest two levels under the top, then the top. The rest keys
+ * off the top rather than the floor so a wide range does not drop all the way
+ * to easy.
  *
- *   easy..extreme  easy, medium, hard | hard | easy | extreme
+ *   easy..extreme  easy, medium, hard | hard | medium | extreme
  *   hard..extreme  hard | hard | medium | extreme
- *   extreme only   extreme | hard | extreme
+ *   extreme only   medium | extreme
+ *   hard only      easy | hard
  */
 export function waveCycle(tags: readonly string[]): WaveStep[] {
   const picked = LEVELS.map((l, i) => (tags.includes(l) ? i : -1)).filter((i) => i >= 0)
@@ -51,7 +54,7 @@ export function waveCycle(tags: readonly string[]): WaveStep[] {
   const steps: WaveStep[] = []
   for (let l = lo; l < hi; l++) steps.push({ phase: 'build', level: l })
   if (lo < hi) steps.push({ phase: 'plateau', level: hi - 1 })
-  steps.push({ phase: 'rest', level: Math.max(0, lo - 1) })
+  steps.push({ phase: 'rest', level: Math.max(0, hi - 2) })
   steps.push({ phase: 'explosion', level: hi })
   return steps
 }

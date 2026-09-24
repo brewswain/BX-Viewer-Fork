@@ -17,15 +17,16 @@ const lib: RadioCandidate[] = [
 ]
 
 describe('radio wave', () => {
-  it('builds, plateaus, rests under the floor, then explodes', () => {
-    expect(shape([])).toEqual(['build:0', 'build:1', 'build:2', 'plateau:2', 'rest:0', 'explosion:3'])
+  it('builds, plateaus, rests two under the top, then explodes', () => {
+    expect(shape([])).toEqual(['build:0', 'build:1', 'build:2', 'plateau:2', 'rest:1', 'explosion:3'])
     expect(shape(['hard', 'extreme', 'hypno'])).toEqual([
       'build:2',
       'plateau:2',
       'rest:1',
       'explosion:3',
     ])
-    expect(shape(['extreme'])).toEqual(['rest:2', 'explosion:3'])
+    expect(shape(['extreme'])).toEqual(['rest:1', 'explosion:3'])
+    expect(shape(['hard'])).toEqual(['rest:0', 'explosion:2'])
   })
 
   it('steps on from the last radio row and wraps', () => {
