@@ -6263,10 +6263,37 @@ body:has(.manager-layout) {
   padding: 0.55rem 0.8rem;
 }
 
-.play-gate .play-gate-done {
-  margin: 0.5rem 0;
+/* Confirms a Play gate add without blocking; sits over the player bar area. */
+.queue-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2700;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 0.7rem 1.1rem;
   color: var(--text);
-  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: queue-toast 2.5s ease forwards;
+}
+
+@keyframes queue-toast {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  8%,
+  88% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .play-gate-close {
