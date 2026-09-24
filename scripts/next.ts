@@ -1,7 +1,7 @@
 /**
- * Thin `next` launcher. Its only job is to preload the exFAT readlink shim when
- * the repo sits on a filesystem that needs it (see exfat-readlink-shim.cjs).
- * On every other volume this spawns next verbatim and changes nothing.
+ * Thin `next` launcher. Its only job is to make next work when the repo sits on
+ * exFAT: preload the readlink shim (see exfat-readlink-shim.cjs) and run dev on
+ * webpack. On every other volume this spawns next verbatim and changes nothing.
  *
  * Usage: bun run scripts/next.ts <build|dev|start> [...args]
  */
@@ -20,12 +20,22 @@ function readlinkReportsEisdir(): boolean {
 }
 
 const env = { ...process.env }
+const args = process.argv.slice(2)
 
 if (readlinkReportsEisdir()) {
   // Forward slashes: NODE_OPTIONS treats backslashes inside quotes as escapes,
   // which mangles a Windows path. Node accepts either separator.
   const shim = fileURLToPath(new URL('./exfat-readlink-shim.cjs', import.meta.url)).replace(/\\/g, '/')
   env.NODE_OPTIONS = [env.NODE_OPTIONS, `--require "${shim}"`].filter(Boolean).join(' ')
+
+  // Turbopack dev is Rust, so the shim never reaches it, and on exFAT its
+  // rebuilds panic with "Next.js package not found" (a /settings compile, then
+  // every HMR update after it, each one reloading the page). Webpack goes
+  // through node's fs and the shim. Builds are unaffected, so only dev switches;
+  // an explicit --turbopack still wins.
+  if (args[0] === 'dev' && !args.some((a) => a === '--turbopack' || a === '--turbo' || a === '--webpack')) {
+    args.push('--webpack')
+  }
 }
 
 /**
@@ -35,7 +45,7 @@ if (readlinkReportsEisdir()) {
  * and this process waiting on it, that read as the server hanging on Ctrl+C.
  */
 const nextBin = createRequire(import.meta.url).resolve('next/dist/bin/next')
-const child = spawn('node', [nextBin, ...process.argv.slice(2)], { stdio: 'inherit', env })
+const child = spawn('node', [nextBin, ...args], { stdio: 'inherit', env })
 
 /**
  * Ctrl+C reaches every process on the console, next included, so the first one
