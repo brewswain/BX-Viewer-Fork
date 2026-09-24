@@ -1,5 +1,6 @@
 import type { NextResponse } from 'next/server'
 import path from 'node:path'
+import { withCanonicalTags } from '@/lib/browse/facets'
 import { jsonError, jsonResponse, writeJson } from '@/lib/json'
 import { isValidId } from '@/lib/paths'
 import { bumpVersion } from '@/lib/version'
@@ -70,6 +71,10 @@ export async function handleWriteMeta(
     return jsonError(`Invalid JSON: ${errorMessage(e)}`, 400)
   }
 
+  // A tag edit lands canonical, same as an import.
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    data = withCanonicalTags(folderId, data)
+  }
   await writeJson(path.join(folderPath, 'meta.json'), data)
   bumpVersion()
   return jsonResponse({ saved: folderId })

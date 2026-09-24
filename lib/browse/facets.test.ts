@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { matchesSelection, normalizeTags } from './facets'
+import { matchesSelection, normalizeTags, withCanonicalTags } from './facets'
 
 describe('matchesSelection', () => {
   it('passes everything when nothing is selected', () => {
@@ -71,5 +71,36 @@ describe('normalizeTags', () => {
     expect(new Set(normalizeTags('the-knot', { pathCreator: 'BX Studio', tags: once }))).toEqual(
       new Set(once),
     )
+  })
+})
+
+describe('withCanonicalTags', () => {
+  it('rewrites a raw pack meta, keeping every other field', () => {
+    // BX Studio: Volume Three as its pack shipped it.
+    const raw = {
+      title: 'BX Studio: Volume Three',
+      pathCreator: 'BX Studio (ThingsnStuff style)',
+      tags: ['BounceX', 'compilation', 'Other', 'Hard', 'Extreme'],
+      videoFile: 'v.mp4',
+    }
+    expect(withCanonicalTags('bx-studio-volume-three', raw)).toEqual({
+      ...raw,
+      tags: ['bouncex', 'compilation', 'hard', 'extreme', 'synthetic', 'thingsnstuff style'],
+    })
+  })
+
+  it('returns the same object when nothing changes, so no empty tags appear', () => {
+    const plain = { title: 'Some Playlist', videos: ['a'] }
+    expect(withCanonicalTags('some-playlist', plain)).toBe(plain)
+    const done = { tags: ['bouncex', 'hard'] }
+    expect(withCanonicalTags('x', done)).toBe(done)
+  })
+
+  it('ignores malformed fields instead of throwing', () => {
+    expect(withCanonicalTags('x', { title: 7, tags: ['Hard', 3, null] })).toEqual({
+      title: 7,
+      tags: ['hard'],
+    })
+    expect(withCanonicalTags('x', { tags: 'hard' }).tags).toEqual([])
   })
 })

@@ -1,6 +1,7 @@
 import type { NextResponse } from 'next/server'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { withCanonicalTags } from '@/lib/browse/facets'
 import { jsonError, jsonResponse, writeJson } from '@/lib/json'
 import { PLAYLIST_BASE, VIDEO_BASE, isValidId } from '@/lib/paths'
 import { bumpVersion } from '@/lib/version'
@@ -113,7 +114,10 @@ export async function createVideo(request: Request): Promise<NextResponse> {
 
       await moveFonts(form, folderPath)
 
-      await writeJson(path.join(folderPath, 'meta.json'), meta)
+      await writeJson(
+        path.join(folderPath, 'meta.json'),
+        withCanonicalTags(path.basename(folderPath), meta),
+      )
 
       // Prepended, not appended — new packages surface at the top of Browse.
       const manifest = await readManifestOrCreate('videos')
@@ -214,7 +218,10 @@ export async function updateVideo(request: Request, folderId: string): Promise<N
       // Fonts — new uploads only; existing font files are left in place.
       await moveFonts(form, folderPath)
 
-      await writeJson(path.join(folderPath, 'meta.json'), meta)
+      await writeJson(
+        path.join(folderPath, 'meta.json'),
+        withCanonicalTags(path.basename(folderPath), meta),
+      )
       bumpVersion()
       return jsonResponse({ updated: newFolderId, renamed: newFolderId !== folderId })
     } catch (e) {
@@ -261,7 +268,10 @@ export async function createPlaylist(request: Request): Promise<NextResponse> {
 
       meta.totalDurationSecs = round3(await tallyPlaylistDuration(meta.videos))
 
-      await writeJson(path.join(folderPath, 'meta.json'), meta)
+      await writeJson(
+        path.join(folderPath, 'meta.json'),
+        withCanonicalTags(path.basename(folderPath), meta),
+      )
 
       const manifest = await readManifestOrCreate('playlists')
       manifest.unshift(folderId)
@@ -324,7 +334,10 @@ export async function updatePlaylist(request: Request, folderId: string): Promis
 
       meta.totalDurationSecs = round3(await tallyPlaylistDuration(meta.videos))
 
-      await writeJson(path.join(folderPath, 'meta.json'), meta)
+      await writeJson(
+        path.join(folderPath, 'meta.json'),
+        withCanonicalTags(path.basename(folderPath), meta),
+      )
       bumpVersion()
       return jsonResponse({ updated: newFolderId, renamed: newFolderId !== folderId })
     } catch (e) {

@@ -193,3 +193,23 @@ export function normalizeTags(folder: string, meta: TagSource): string[] {
 
   return [...out]
 }
+
+/**
+ * `meta` with its tags made canonical, for every write of a meta.json (import,
+ * manager saves) so a new video never waits on `bun run retag` to show up under
+ * the sidebar's facets. Returns `meta` itself when nothing changes, so an
+ * untagged entry doesn't gain an empty `tags` array. The input is whatever JSON
+ * a pack or the manager sent, so fields are read defensively.
+ */
+export function withCanonicalTags<T extends object>(folder: string, meta: T): T {
+  const m = meta as Record<string, unknown>
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
+  const tags = normalizeTags(folder, {
+    title: str(m.title),
+    videoCreator: str(m.videoCreator),
+    pathCreator: str(m.pathCreator),
+    author: str(m.author),
+    tags: Array.isArray(m.tags) ? m.tags.filter((t): t is string => typeof t === 'string') : [],
+  })
+  return JSON.stringify(tags) === JSON.stringify(m.tags ?? []) ? meta : { ...meta, tags }
+}
