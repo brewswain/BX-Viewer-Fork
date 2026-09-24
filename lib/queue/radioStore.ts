@@ -13,8 +13,16 @@
 import { useSyncExternalStore } from 'react'
 
 import * as Q from './queue'
-import { pickNext, parseRadio, type RadioCandidate, type RadioSettings } from './radio'
+import {
+  pickNext,
+  parseRadio,
+  tasteTags,
+  widenTaste,
+  type RadioCandidate,
+  type RadioSettings,
+} from './radio'
 import { appendToQueue, getQueue } from './store'
+import { showQueueToast } from './toast'
 
 const KEY = 'bx_radio'
 
@@ -66,6 +74,7 @@ export function useRadio(): RadioSettings {
 }
 
 let inFlight: Promise<string | null> | null = null
+let dryAt = -1
 
 /**
  * Append one radio pick when radio is on and nothing is left to play, and
@@ -88,8 +97,21 @@ export function radioTopUp(ended?: readonly string[]): Promise<string | null> {
       const q = getQueue()
       const already = Q.upcoming(q)[0]
       if (already) return already.uid
-      const pick = pickNext(q, getRadio(), videos, Math.random, ended)
-      if (!pick) return null
+      const settings = getRadio()
+      const pick = pickNext(q, settings, videos, Math.random, ended)
+      if (!pick) {
+        // Once per queue length, since the queue player asks again on every change.
+        if (dryAt !== q.items.length) {
+          dryAt = q.items.length
+          showQueueToast('Radio has played every video in the library', 5000)
+        }
+        return null
+      }
+      if (pick.widened) {
+        const was = tasteTags(settings.tags).join(', ')
+        setRadio({ tags: widenTaste(settings.tags) })
+        showQueueToast(`Radio ran out of ${was} videos, so it's opening up to the whole library`, 5000)
+      }
       const after = appendToQueue({ ...pick.video, radio: pick.mark })
       return after.items[after.items.length - 1].uid
     } catch {

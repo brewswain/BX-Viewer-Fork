@@ -40,12 +40,12 @@ export type RadioCandidate = {
  * everything. One cycle: build a step at a time up to just below the top, hold
  * there once more, rest two levels under the top, then the top. The rest keys
  * off the top rather than the floor so a wide range does not drop all the way
- * to easy.
+ * to easy; a single level rests one under.
  *
  *   easy..extreme  easy, medium, hard | hard | medium | extreme
  *   hard..extreme  hard | hard | medium | extreme
- *   extreme only   medium | extreme
- *   hard only      easy | hard
+ *   extreme only   hard | extreme
+ *   hard only      medium | hard
  */
 export function waveCycle(tags: readonly string[]): WaveStep[] {
   const picked = LEVELS.map((l, i) => (tags.includes(l) ? i : -1)).filter((i) => i >= 0)
@@ -54,7 +54,8 @@ export function waveCycle(tags: readonly string[]): WaveStep[] {
   const steps: WaveStep[] = []
   for (let l = lo; l < hi; l++) steps.push({ phase: 'build', level: l })
   if (lo < hi) steps.push({ phase: 'plateau', level: hi - 1 })
-  steps.push({ phase: 'rest', level: Math.max(0, hi - 2) })
+  // A single level has no climb to come down from, so its rest is just under it.
+  steps.push({ phase: 'rest', level: Math.max(0, hi - (lo < hi ? 2 : 1)) })
   steps.push({ phase: 'explosion', level: hi })
   return steps
 }
@@ -106,14 +107,19 @@ const LONG_SECS = 20 * 60
 /** Short enough to count as a breather in a rest step. */
 const SHORT_SECS = 6 * 60
 
-/** How many recent queue rows are off limits, as a share of the pool. */
-const RECENT_SHARE = 0.5
-const RECENT_MAX = 12
-
-export type Pick = { video: QueueVideo; mark: RadioMark }
+/** `widened`: the taste had nothing left, so this came from the whole library. */
+export type Pick = { video: QueueVideo; mark: RadioMark; widened?: true }
 
 /** The taste minus difficulty, which steers the wave instead of filtering. */
-const tasteTags = (tags: readonly string[]) => tags.filter((t) => !DIFFICULTY_TAGS.has(t))
+export const tasteTags = (tags: readonly string[]) =>
+  tags.filter((t) => !DIFFICULTY_TAGS.has(t))
+
+/**
+ * The taste opened up to the whole library: the tags that filter go, while
+ * difficulty (the wave's shape) and the long-form opt-in stay.
+ */
+export const widenTaste = (tags: readonly string[]) =>
+  tags.filter((t) => DIFFICULTY_TAGS.has(t) || t === OPT_IN)
 
 /** Every video the taste allows, before the wave weighs them. */
 export function radioPool<T extends RadioCandidate>(
@@ -136,8 +142,10 @@ export function radioPool<T extends RadioCandidate>(
  * Taste tags other than difficulty are a filter (a video must share one) and a
  * boost (each extra shared tag weighs more). The draw is only from the videos
  * closest to the step's level, so it lands on the level whenever one exists.
- * Videos from the recent end of the queue sit out, so a small pool does not
- * loop the same two.
+ *
+ * Radio never replays: anything already in the queue, played or waiting, sits
+ * out. When that leaves the taste empty, the pick comes from the widened
+ * taste instead and says so; null only once the whole library has played.
  */
 export function pickNext(
   q: Queue,
@@ -151,15 +159,16 @@ export function pickNext(
   const target = cycle[step]
   const taste = tasteTags(settings.tags)
 
-  const pool = radioPool(settings.tags, library)
-  if (pool.length === 0) return null
-
-  const recentCount = Math.min(RECENT_MAX, Math.floor(pool.length * RECENT_SHARE))
-  const recent = new Set(
-    recentCount > 0 ? q.items.slice(-recentCount).map((i) => i.folder) : [],
-  )
-  const fresh = pool.filter((v) => !recent.has(v._folder))
-  const candidates = fresh.length ? fresh : pool
+  const queued = new Set(q.items.map((i) => i.folder))
+  const unplayed = (tags: readonly string[]) =>
+    radioPool(tags, library).filter((v) => !queued.has(v._folder))
+  let candidates = unplayed(settings.tags)
+  let widened = false
+  if (candidates.length === 0 && taste.length > 0) {
+    candidates = unplayed(widenTaste(settings.tags))
+    widened = true
+  }
+  if (candidates.length === 0) return null
 
   // Levels away from the step; untagged counts as one off. Only the closest
   // tier is drawn from, since weighting alone lets thirty hard videos drown
@@ -199,6 +208,7 @@ export function pickNext(
       durationSecs: chosen.durationSecs,
     },
     mark: { ...target, step },
+    ...(widened ? { widened: true as const } : {}),
   }
 }
 

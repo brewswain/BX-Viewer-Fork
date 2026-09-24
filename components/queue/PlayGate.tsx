@@ -12,7 +12,7 @@
  */
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 
 import { hasPending, upcoming, type QueueVideo } from '@/lib/queue/queue'
@@ -23,6 +23,7 @@ import {
   queueHref,
   replaceQueue,
 } from '@/lib/queue/store'
+import { showQueueToast } from '@/lib/queue/toast'
 
 type Request = {
   /** "Next from: ..." in the queue panel, and the dialog's wording. */
@@ -122,8 +123,6 @@ const count = (n: number) => `${n} ${n === 1 ? 'video' : 'videos'}`
 
 export default function PlayGate() {
   const req = usePending()
-  // Adding confirms in a toast, so the dialog closes at once and nothing blocks.
-  const [toast, setToast] = useState<{ text: string; n: number } | null>(null)
 
   useEffect(() => {
     if (!req) return
@@ -134,24 +133,13 @@ export default function PlayGate() {
     return () => document.removeEventListener('keydown', onKey)
   }, [req])
 
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 2500)
-    return () => clearTimeout(t)
-  }, [toast])
-
-  // `n` restarts the timer and the entry animation when adds come in a row.
+  // Adding confirms in a toast, so the dialog closes at once and nothing blocks.
   const added = (text: string) => {
     setPending(null)
-    setToast((prev) => ({ text, n: (prev?.n ?? 0) + 1 }))
+    showQueueToast(text)
   }
 
-  const toastEl = toast && (
-    <div key={toast.n} className="queue-toast" role="status">
-      {toast.text}
-    </div>
-  )
-  if (!req) return toastEl && createPortal(toastEl, document.body)
+  if (!req) return null
   const left = upcoming(getQueue()).length
   const what = req.videos.length === 1 ? (req.videos[0].title ?? req.title) : req.title
 
@@ -197,7 +185,6 @@ export default function PlayGate() {
           </button>
         </div>
       </div>
-      {toastEl}
     </>,
     document.body,
   )

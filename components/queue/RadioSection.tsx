@@ -151,7 +151,7 @@ export default function RadioSection({ play, isPlayer }: Props) {
               {starting ? 'Picking…' : 'Start radio'}
             </button>
           )}
-          {noMatch && <div className="queue-save-error">No video matches this taste.</div>}
+          {noMatch && <div className="queue-save-error">Nothing left: this queue has played every video.</div>}
         </>
       )}
     </div>

@@ -4,6 +4,7 @@ import Link from 'next/link'
 
 import PlayGate from '@/components/queue/PlayGate'
 import QueueDrawer from '@/components/queue/QueueDrawer'
+import QueueToast from '@/components/queue/QueueToast'
 import { setQueueDrawerOpen, useQueueDrawerOpen } from '@/components/queue/queueUi'
 import { upcoming } from '@/lib/queue/queue'
 import { useQueue } from '@/lib/queue/store'
@@ -127,6 +128,7 @@ export default function SiteHeader({
       </nav>
       <QueueDrawer />
       <PlayGate />
+      <QueueToast />
     </header>
   )
 }

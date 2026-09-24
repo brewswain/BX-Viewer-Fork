@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'bun:test'
 
 import * as Q from './queue'
-import { levelRange, nextStep, pickNext, waveCycle, type RadioCandidate } from './radio'
+import {
+  levelRange,
+  nextStep,
+  pickNext,
+  waveCycle,
+  widenTaste,
+  type RadioCandidate,
+} from './radio'
 
 const shape = (tags: string[]) => waveCycle(tags).map((s) => `${s.phase}:${s.level}`)
 
@@ -25,8 +32,10 @@ describe('radio wave', () => {
       'rest:1',
       'explosion:3',
     ])
-    expect(shape(['extreme'])).toEqual(['rest:1', 'explosion:3'])
-    expect(shape(['hard'])).toEqual(['rest:0', 'explosion:2'])
+    // A single level rests one under it.
+    expect(shape(['extreme'])).toEqual(['rest:2', 'explosion:3'])
+    expect(shape(['hard'])).toEqual(['rest:1', 'explosion:2'])
+    expect(shape(['easy'])).toEqual(['rest:0', 'explosion:0'])
   })
 
   it('steps on from the last radio row and wraps', () => {
@@ -49,7 +58,7 @@ describe('radio wave', () => {
     // The queue's current item stands in when no video is named.
     const q = Q.setCurrent(Q.append(Q.EMPTY_QUEUE, { folder: 'a', tags: ['medium'] }, 'a'), 'a')
     expect(nextStep(q, full)).toBe(1)
-    // Hard only has no climb, so it rests at medium before exploding.
+    // Hard only has no climb, so it rests before exploding.
     expect(nextStep(Q.EMPTY_QUEUE, waveCycle(['hard']), ['hard'])).toBe(0)
   })
 
@@ -90,13 +99,32 @@ describe('radio pick', () => {
     }
   })
 
-  it('does not replay a recent video while others are left', () => {
-    const q = Q.append(Q.EMPTY_QUEUE, { folder: 'h1' }, 'h1')
-    const p = pickNext(q, settings(['hard', 'extreme', 'hypno']), lib, () => 0.5)
-    expect(p!.video.folder).not.toBe('h1')
+  it('never replays anything already in the queue', () => {
+    let q = Q.EMPTY_QUEUE
+    const seen: string[] = []
+    // hypno has four short videos; each pick must be new until they run out.
+    for (let i = 0; i < 4; i++) {
+      const p = pickNext(q, settings(['hypno']), lib, () => 0.5)!
+      expect(p.widened).toBeUndefined()
+      expect(seen).not.toContain(p.video.folder)
+      seen.push(p.video.folder)
+      q = Q.append(q, { ...p.video, radio: p.mark })
+    }
+    // Played rows stay in the queue, so the taste is now spent.
+    const next = pickNext(q, settings(['hypno']), lib, () => 0.5)!
+    expect(next.widened).toBe(true)
+    expect(seen).not.toContain(next.video.folder)
   })
 
-  it('returns null when nothing shares the taste', () => {
-    expect(pickNext(Q.EMPTY_QUEUE, settings(['furry']), lib)).toBeNull()
+  it('widens a taste that matches nothing, keeping the wave', () => {
+    const p = pickNext(Q.EMPTY_QUEUE, settings(['hard', 'extreme', 'furry']), lib, () => 0.5)!
+    expect(p.widened).toBe(true)
+    expect(p.mark).toEqual({ phase: 'build', level: 2, step: 0 })
+    expect(widenTaste(['hard', 'furry', 'long-form', 'pmv'])).toEqual(['hard', 'long-form'])
+  })
+
+  it('returns null once the whole library has played', () => {
+    const q = lib.reduce((acc, v) => Q.append(acc, { folder: v._folder }), Q.EMPTY_QUEUE)
+    expect(pickNext(q, settings(['furry']), lib)).toBeNull()
   })
 })

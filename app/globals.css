@@ -6263,7 +6263,7 @@ body:has(.manager-layout) {
   padding: 0.55rem 0.8rem;
 }
 
-/* Confirms a Play gate add without blocking; sits over the player bar area. */
+/* Queue and radio notices; never blocks. Duration comes inline from the toast. */
 .queue-toast {
   position: fixed;
   bottom: 1.5rem;
