@@ -12,6 +12,8 @@ describe('matchesSelection', () => {
     expect(matchesSelection(tags, ['hard', 'furry'], 'or')).toBe(true)
     expect(matchesSelection(tags, ['hard', 'furry'], 'and')).toBe(false)
     expect(matchesSelection(tags, ['hard', 'bouncex'], 'and')).toBe(true)
+    expect(matchesSelection(tags, ['hard'], 'one')).toBe(true)
+    expect(matchesSelection(tags, ['furry'], 'one')).toBe(false)
   })
 
   it('ignores the case of stored tags', () => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { FACETS, extraTags, tagLabel, type MatchMode } from '@/lib/browse/facets'
+import { FACETS, MATCH_MODES, extraTags, tagLabel, type MatchMode } from '@/lib/browse/facets'
 
 type Props = {
   /** The list the buttons filter, used for counts and to hide empty tags. */
@@ -37,26 +37,29 @@ export default function TagSidebar({
   }, [entries, counts, selected])
 
   function toggle(tag: string) {
-    onChange(
-      selected.includes(tag) ? selected.filter((t) => t !== tag) : [...selected, tag],
-      mode,
-    )
+    if (selected.includes(tag)) onChange(selected.filter((t) => t !== tag), mode)
+    else onChange(mode === 'one' ? [tag] : [...selected, tag], mode)
+  }
+
+  // Into 'one', keep the most recent pick only.
+  function setMode(m: MatchMode) {
+    onChange(m === 'one' ? selected.slice(-1) : selected, m)
   }
 
   return (
     <aside className="tag-sidebar" aria-label="Filter by tag">
       <div className="tag-sidebar-head">
         <div className="tag-mode" role="radiogroup" aria-label="Combine selected tags">
-          {(['or', 'and'] as const).map((m) => (
+          {MATCH_MODES.map(({ mode: m, label, title }) => (
             <button
               key={m}
               role="radio"
               aria-checked={mode === m}
               className={`tag-mode-btn${mode === m ? ' active' : ''}`}
-              title={m === 'or' ? 'Match any selected tag' : 'Match every selected tag'}
-              onClick={() => onChange(selected, m)}
+              title={title}
+              onClick={() => setMode(m)}
             >
-              {m === 'or' ? 'Any' : 'All'}
+              {label}
             </button>
           ))}
         </div>

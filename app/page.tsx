@@ -399,70 +399,70 @@ function Browse() {
         </button>
       </div>
 
-      <main className="main-content">
+      <main className="main-content browse-page">
         {/* Videos Panel */}
         <div
           id="panelVideos"
           style={activeTab === 'videos' ? undefined : { display: 'none' }}
         >
-          <div className="section-header">
-            <h1 className="section-title">All Videos</h1>
-            <span className="section-count" id="videoCount">
-              {videoCount}
-            </span>
-            <div className="section-actions">
-              <div className="play-all">
-                <Link
-                  className="play-all-btn"
-                  id="btnPlayAll"
-                  href={`/playlist?p=${QUICK_PLAYLIST_ID}`}
-                  aria-disabled={playAllDisabled || undefined}
-                  title={
-                    isFiltered
-                      ? 'Play the filtered videos as a temporary playlist'
-                      : 'Play the whole library as a temporary playlist'
-                  }
-                  onClick={(e) => onPlayAllClick(e, false)}
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
-                    <polygon points="6,4 20,12 6,20" />
-                  </svg>
-                  Play all
-                </Link>
-                <Link
-                  className="play-all-btn play-all-shuffle"
-                  id="btnShuffleAll"
-                  href={`/playlist?p=${QUICK_PLAYLIST_ID}`}
-                  aria-disabled={playAllDisabled || undefined}
-                  title="Shuffle the same videos"
-                  aria-label="Shuffle all"
-                  onClick={(e) => onPlayAllClick(e, true)}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    width="14"
-                    height="14"
-                  >
-                    <polyline points="16,3 21,3 21,8" />
-                    <line x1="4" y1="20" x2="21" y2="3" />
-                    <polyline points="21,16 21,21 16,21" />
-                    <line x1="15" y1="15" x2="21" y2="21" />
-                    <line x1="4" y1="4" x2="9" y2="9" />
-                  </svg>
-                </Link>
-              </div>
-              <ViewToggle
-                mode={videoViewMode}
-                onChange={changeVideoView}
-                gridBtnId="btnGridViewVideos"
-                listBtnId="btnListViewVideos"
-              />
-            </div>
-          </div>
           <div className="browse-layout">
+            <div className="section-header">
+              <h1 className="section-title">All Videos</h1>
+              <span className="section-count" id="videoCount">
+                {videoCount}
+              </span>
+              <div className="section-actions">
+                <div className="play-all">
+                  <Link
+                    className="play-all-btn"
+                    id="btnPlayAll"
+                    href={`/playlist?p=${QUICK_PLAYLIST_ID}`}
+                    aria-disabled={playAllDisabled || undefined}
+                    title={
+                      isFiltered
+                        ? 'Play the filtered videos as a temporary playlist'
+                        : 'Play the whole library as a temporary playlist'
+                    }
+                    onClick={(e) => onPlayAllClick(e, false)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                      <polygon points="6,4 20,12 6,20" />
+                    </svg>
+                    Play all
+                  </Link>
+                  <Link
+                    className="play-all-btn play-all-shuffle"
+                    id="btnShuffleAll"
+                    href={`/playlist?p=${QUICK_PLAYLIST_ID}`}
+                    aria-disabled={playAllDisabled || undefined}
+                    title="Shuffle the same videos"
+                    aria-label="Shuffle all"
+                    onClick={(e) => onPlayAllClick(e, true)}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      width="14"
+                      height="14"
+                    >
+                      <polyline points="16,3 21,3 21,8" />
+                      <line x1="4" y1="20" x2="21" y2="3" />
+                      <polyline points="21,16 21,21 16,21" />
+                      <line x1="15" y1="15" x2="21" y2="21" />
+                      <line x1="4" y1="4" x2="9" y2="9" />
+                    </svg>
+                  </Link>
+                </div>
+                <ViewToggle
+                  mode={videoViewMode}
+                  onChange={changeVideoView}
+                  gridBtnId="btnGridViewVideos"
+                  listBtnId="btnListViewVideos"
+                />
+              </div>
+            </div>
             <TagSidebar
               entries={sidebarBase}
               selected={videoSel.tags}
@@ -511,19 +511,19 @@ function Browse() {
           id="panelPlaylists"
           style={activeTab === 'playlists' ? undefined : { display: 'none' }}
         >
-          <div className="section-header">
-            <h1 className="section-title">Playlists</h1>
-            <span className="section-count" id="playlistCount">
-              {playlistCount}
-            </span>
-            <ViewToggle
-              mode={playlistViewMode}
-              onChange={changePlaylistView}
-              gridBtnId="btnGridViewPlaylists"
-              listBtnId="btnListViewPlaylists"
-            />
-          </div>
           <div className="browse-layout">
+            <div className="section-header">
+              <h1 className="section-title">Playlists</h1>
+              <span className="section-count" id="playlistCount">
+                {playlistCount}
+              </span>
+              <ViewToggle
+                mode={playlistViewMode}
+                onChange={changePlaylistView}
+                gridBtnId="btnGridViewPlaylists"
+                listBtnId="btnListViewPlaylists"
+              />
+            </div>
             <TagSidebar
               entries={playlists}
               selected={playlistSel.tags}

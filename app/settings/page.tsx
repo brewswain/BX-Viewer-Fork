@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import SiteHeader from '@/components/SiteHeader'
-import { FACETS, tagLabel } from '@/lib/browse/facets'
+import { FACETS, MATCH_MODES, isMatchMode, tagLabel, type MatchMode } from '@/lib/browse/facets'
 import { deviceManager } from '@/lib/device/manager'
 import {
   RATE_RANGE,
@@ -70,7 +70,7 @@ type FormState = {
   deviceOffsetMs: string
   deviceMinCmdMs: string
   browseDefaultTags: string[]
-  browseDefaultMode: 'and' | 'or'
+  browseDefaultMode: MatchMode
 }
 
 function rgbaToHex(rgba: string): string | null {
@@ -127,7 +127,7 @@ function toForm(s: Settings): FormState {
     deviceOffsetMs: String(s.deviceOffsetMs),
     deviceMinCmdMs: String(s.deviceMinCmdMs),
     browseDefaultTags: Array.isArray(s.browseDefaultTags) ? s.browseDefaultTags : [],
-    browseDefaultMode: s.browseDefaultMode === 'and' ? 'and' : 'or',
+    browseDefaultMode: isMatchMode(s.browseDefaultMode) ? s.browseDefaultMode : 'or',
   }
 }
 
@@ -514,16 +514,20 @@ export default function SettingsPage() {
                 to open on the whole library.
               </p>
               <div className="tag-mode" role="radiogroup" aria-label="Combine default tags">
-                {(['or', 'and'] as const).map((m) => (
+                {MATCH_MODES.map(({ mode: m, label, title }) => (
                   <button
                     type="button"
                     key={m}
                     role="radio"
                     aria-checked={form.browseDefaultMode === m}
                     className={`tag-mode-btn${form.browseDefaultMode === m ? ' active' : ''}`}
-                    onClick={() => set('browseDefaultMode', m)}
+                    title={title}
+                    onClick={() => {
+                      set('browseDefaultMode', m)
+                      if (m === 'one') set('browseDefaultTags', form.browseDefaultTags.slice(-1))
+                    }}
                   >
-                    {m === 'or' ? 'Any' : 'All'}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -544,7 +548,9 @@ export default function SettingsPage() {
                               'browseDefaultTags',
                               on
                                 ? form.browseDefaultTags.filter((x) => x !== t)
-                                : [...form.browseDefaultTags, t],
+                                : form.browseDefaultMode === 'one'
+                                  ? [t]
+                                  : [...form.browseDefaultTags, t],
                             )
                           }
                         >

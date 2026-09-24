@@ -5735,15 +5735,42 @@ body:has(.manager-layout) {
 }
 
 /* ── Browse sidebar + pager ── */
+/* The browse page drops the 1400px cap so the sidebar can sit near the left
+   edge; the content column takes the cap instead and centres in what is left. */
+.main-content.browse-page {
+  max-width: none;
+  padding-left: 1.5rem;
+}
+
 .browse-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  gap: 2rem;
+  grid-template-areas:
+    'side head'
+    'side main';
+  grid-template-rows: auto 1fr;
+  column-gap: 3rem;
   align-items: start;
 }
 
+.browse-layout > .section-header,
 .browse-main {
+  width: 100%;
+  max-width: 1336px;
+  justify-self: center;
+}
+
+.browse-layout > .section-header {
+  grid-area: head;
+}
+
+.browse-main {
+  grid-area: main;
   min-width: 0;
+}
+
+.browse-layout > .tag-sidebar {
+  grid-area: side;
 }
 
 /* Sticks under the header and the page tabs (60px + ~42px). */
@@ -5761,6 +5788,7 @@ body:has(.manager-layout) {
 .tag-sidebar-head,
 .tag-sidebar-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -5921,9 +5949,22 @@ body:has(.manager-layout) {
 
 /* Narrow screens: the sidebar becomes a band of chips above the grid. */
 @media (max-width: 900px) {
+  .main-content.browse-page {
+    padding-left: 2rem;
+  }
+
   .browse-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 1.25rem;
+    grid-template-areas:
+      'head'
+      'side'
+      'main';
+    grid-template-rows: auto;
+    row-gap: 1.25rem;
+  }
+
+  .browse-layout > .section-header {
+    margin-bottom: 0;
   }
 
   .tag-sidebar {

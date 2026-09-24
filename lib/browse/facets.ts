@@ -70,7 +70,18 @@ export function extraTags(entries: { tags?: string[] }[]): string[] {
   return [...out].sort()
 }
 
-export type MatchMode = 'and' | 'or'
+/** 'one' keeps a single tag selected; clicking another replaces it. */
+export type MatchMode = 'and' | 'or' | 'one'
+
+export const MATCH_MODES: { mode: MatchMode; label: string; title: string }[] = [
+  { mode: 'one', label: 'One', title: 'One tag at a time: clicking a tag replaces the last' },
+  { mode: 'or', label: 'Any', title: 'Match any selected tag' },
+  { mode: 'and', label: 'All', title: 'Match every selected tag' },
+]
+
+export function isMatchMode(v: unknown): v is MatchMode {
+  return v === 'and' || v === 'or' || v === 'one'
+}
 
 /** Empty selection is "no filter". Compares lower-cased, like the stored tags. */
 export function matchesSelection(

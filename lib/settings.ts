@@ -95,7 +95,7 @@ export type Settings = {
    * opens on the whole library.
    */
   browseDefaultTags: string[]
-  browseDefaultMode: 'and' | 'or'
+  browseDefaultMode: 'and' | 'or' | 'one'
 }
 
 export const DEFAULTS: Settings = {
