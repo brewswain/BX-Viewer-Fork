@@ -571,7 +571,7 @@ function WatchInner() {
         }
         // Done with this video: carry on into the queue if anything waits
         // there, or into a radio pick when radio is on.
-        void radioTopUp().then((uid) => uid && routerRef.current.push(queueHref(uid)))
+        void radioTopUp(meta.tags).then((uid) => uid && routerRef.current.push(queueHref(uid)))
       },
     })
     engineRef.current = engine

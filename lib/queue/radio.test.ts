@@ -29,12 +29,27 @@ describe('radio wave', () => {
   })
 
   it('steps on from the last radio row and wraps', () => {
+    const four = waveCycle(['hard', 'extreme'])
     let q = Q.append(Q.EMPTY_QUEUE, { folder: 'a' }, 'a')
-    expect(nextStep(q, 4)).toBe(0)
+    expect(nextStep(q, four)).toBe(0)
     q = Q.append(q, { folder: 'b', radio: { phase: 'rest', level: 1, step: 3 } }, 'b')
-    q = Q.append(q, { folder: 'c' }, 'c')
-    expect(nextStep(q, 4)).toBe(0)
-    expect(nextStep(q, 6)).toBe(4)
+    q = Q.append(q, { folder: 'c', tags: ['easy'] }, 'c')
+    expect(nextStep(q, four)).toBe(0)
+    expect(nextStep(q, waveCycle([]))).toBe(4)
+  })
+
+  it('a fresh wave joins at the level that just played', () => {
+    const full = waveCycle([]) // build e, m, h | plateau h | rest e | explosion x
+    expect(nextStep(Q.EMPTY_QUEUE, full)).toBe(0)
+    expect(nextStep(Q.EMPTY_QUEUE, full, ['pmv'])).toBe(0)
+    expect(nextStep(Q.EMPTY_QUEUE, full, ['hard'])).toBe(2)
+    // Already at the top: breathe first.
+    expect(nextStep(Q.EMPTY_QUEUE, full, ['hard', 'extreme'])).toBe(4)
+    // The queue's current item stands in when no video is named.
+    const q = Q.setCurrent(Q.append(Q.EMPTY_QUEUE, { folder: 'a', tags: ['medium'] }, 'a'), 'a')
+    expect(nextStep(q, full)).toBe(1)
+    // Hard only has no climb, so it rests at medium before exploding.
+    expect(nextStep(Q.EMPTY_QUEUE, waveCycle(['hard']), ['hard'])).toBe(0)
   })
 
   it('reads a range from several difficulty tags', () => {

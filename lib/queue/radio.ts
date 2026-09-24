@@ -56,13 +56,30 @@ export function waveCycle(tags: readonly string[]): WaveStep[] {
   return steps
 }
 
-/** The cycle index the next pick takes: one on from the last radio row. */
-export function nextStep(q: Queue, cycleLength: number): number {
+/**
+ * The cycle index the next pick takes: one on from the last radio row.
+ *
+ * With no radio row yet, the wave joins where the video that just played left
+ * off (`after`, else the queue's current item) instead of dropping back to the
+ * bottom: the first build or plateau at or above its level, or the rest when
+ * it was already at the top.
+ */
+export function nextStep(
+  q: Queue,
+  cycle: readonly WaveStep[],
+  after?: readonly string[],
+): number {
   for (let i = q.items.length - 1; i >= 0; i--) {
     const mark = q.items[i].radio
-    if (mark) return (mark.step + 1) % cycleLength
+    if (mark) return (mark.step + 1) % cycle.length
   }
-  return 0
+  const seed = levelRange(after ?? q.items.find((i) => i.uid === q.current)?.tags)
+  if (!seed) return 0
+  // The top of a range tag: a hard..extreme video already reached extreme.
+  const climb = cycle.findIndex(
+    (s) => (s.phase === 'build' || s.phase === 'plateau') && s.level >= seed[1],
+  )
+  return climb >= 0 ? climb : cycle.findIndex((s) => s.phase === 'rest')
 }
 
 /** [lo, hi] level range a video's tags claim, or null when it carries none. */
@@ -124,9 +141,10 @@ export function pickNext(
   settings: RadioSettings,
   library: readonly RadioCandidate[],
   rng: () => number = Math.random,
+  after?: readonly string[],
 ): Pick | null {
   const cycle = waveCycle(settings.tags)
-  const step = nextStep(q, cycle.length)
+  const step = nextStep(q, cycle, after)
   const target = cycle[step]
   const taste = tasteTags(settings.tags)
 

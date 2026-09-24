@@ -71,8 +71,11 @@ let inFlight: Promise<string | null> | null = null
  * Append one radio pick when radio is on and nothing is left to play, and
  * return the uid now waiting next (the pick, or whatever was already queued).
  * Concurrent calls in one tab share a single pick.
+ *
+ * `ended` is the tags of a video that just ended outside the queue, so a fresh
+ * wave joins at its level.
  */
-export function radioTopUp(): Promise<string | null> {
+export function radioTopUp(ended?: readonly string[]): Promise<string | null> {
   const waiting = Q.upcoming(getQueue())[0]
   if (waiting) return Promise.resolve(waiting.uid)
   if (!getRadio().enabled) return Promise.resolve(null)
@@ -85,7 +88,7 @@ export function radioTopUp(): Promise<string | null> {
       const q = getQueue()
       const already = Q.upcoming(q)[0]
       if (already) return already.uid
-      const pick = pickNext(q, getRadio(), videos)
+      const pick = pickNext(q, getRadio(), videos, Math.random, ended)
       if (!pick) return null
       const after = addToQueue({ ...pick.video, radio: pick.mark })
       return after.items[after.items.length - 1].uid

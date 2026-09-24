@@ -313,7 +313,8 @@ function PlaylistInner() {
           // just stops, keeping everything that was in it.
           // Radio refills it from its own effect below.
           if (first.uids) return
-          void radioTopUp().then((uid) => uid && routerRef.current.push(queueHref(uid)))
+          const ended = metasNow().find((m) => m._folder === now.currentFolder)
+          void radioTopUp(ended?.tags).then((uid) => uid && routerRef.current.push(queueHref(uid)))
           return
         }
         if (result.action === 'repeat') {
