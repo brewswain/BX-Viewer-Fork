@@ -17,7 +17,8 @@ import DevicePanel from '@/components/player/DevicePanel'
 import QueueMenu from '@/components/queue/QueueMenu'
 import QueuePanel from '@/components/queue/QueuePanel'
 import { upcoming } from '@/lib/queue/queue'
-import { getQueue, queueHref, useQueue } from '@/lib/queue/store'
+import { radioTopUp } from '@/lib/queue/radioStore'
+import { queueHref, useQueue } from '@/lib/queue/store'
 import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
 import SiteHeader from '@/components/SiteHeader'
@@ -568,9 +569,9 @@ function WatchInner() {
           void video!.play().catch(() => {})
           return
         }
-        // Done with this video: carry on into the queue if anything waits there.
-        const next = upcoming(getQueue())[0]
-        if (next) routerRef.current.push(queueHref(next.uid))
+        // Done with this video: carry on into the queue if anything waits
+        // there, or into a radio pick when radio is on.
+        void radioTopUp().then((uid) => uid && routerRef.current.push(queueHref(uid)))
       },
     })
     engineRef.current = engine

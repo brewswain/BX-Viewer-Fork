@@ -25,6 +25,7 @@ import {
   useQueue,
 } from '@/lib/queue/store'
 import { difficultyOf } from './queueUi'
+import RadioSection from './RadioSection'
 
 type Props = {
   onPlay?: (uid: string) => void
@@ -129,7 +130,12 @@ export default function QueuePanel({ onPlay, isPlayer = false }: Props) {
         <div className="queue-row-info">
           <div className="queue-row-title">{item.title || item.folder}</div>
           <div className="queue-row-meta">
-            {diff && <span className={`queue-diff diff-${diff}`}>{tagLabel(diff)}</span>}
+            {item.radio && (
+              <span className="queue-radio" title="Picked by radio">
+                Radio · {item.radio.phase}
+              </span>
+            )}
+            {diff &&<span className={`queue-diff diff-${diff}`}>{tagLabel(diff)}</span>}
             {item.durationSecs != null && <span>{secsToTimecode(item.durationSecs)}</span>}
           </div>
         </div>
@@ -240,6 +246,8 @@ export default function QueuePanel({ onPlay, isPlayer = false }: Props) {
           </button>
         </div>
       )}
+
+      <RadioSection play={play} isPlayer={isPlayer} />
 
       {items.length === 0 ? (
         <p className="queue-empty">

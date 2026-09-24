@@ -16,6 +16,7 @@ import DevicePanel from '@/components/player/DevicePanel'
 import QueueMenu from '@/components/queue/QueueMenu'
 import QueuePanel from '@/components/queue/QueuePanel'
 import { upcoming } from '@/lib/queue/queue'
+import { radioTopUp, useRadio } from '@/lib/queue/radioStore'
 import {
   getQueue,
   QUEUE_PLAYLIST_ID,
@@ -310,9 +311,9 @@ function PlaylistInner() {
         if (result.action === 'stop') {
           // A finished playlist carries on into the queue. The queue itself
           // just stops, keeping everything that was in it.
+          // Radio refills it from its own effect below.
           if (first.uids) return
-          const next = upcoming(getQueue())[0]
-          if (next) routerRef.current.push(queueHref(next.uid))
+          void radioTopUp().then((uid) => uid && routerRef.current.push(queueHref(uid)))
           return
         }
         if (result.action === 'repeat') {
@@ -505,6 +506,14 @@ function PlaylistInner() {
       cancelled = true
     }
   }, [isQueue, queue, emptyPlaylist])
+
+  // Radio keeps one pick waiting behind the playing row. The sync effect above
+  // then treats it like any other addition, including resuming a dry queue.
+  const radio = useRadio()
+  useEffect(() => {
+    if (!isQueue || !radio.enabled || !queue.current) return
+    if (upcoming(queue).length === 0) void radioTopUp()
+  }, [isQueue, radio, queue])
 
   // ── Loop / shuffle ──────────────────────────────────────────────────────────
 

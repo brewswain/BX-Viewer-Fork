@@ -11,6 +11,8 @@
  * so the panel can draw a row without fetching the library.
  */
 
+import type { RadioMark } from './radio'
+
 export type QueueItem = {
   uid: string
   folder: string
@@ -18,6 +20,8 @@ export type QueueItem = {
   thumbnail?: string
   tags?: string[]
   durationSecs?: number
+  /** Set on rows the radio added: which wave step picked it. */
+  radio?: RadioMark
 }
 
 export type Queue = {

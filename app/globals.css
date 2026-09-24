@@ -6428,6 +6428,137 @@ body:has(.manager-layout) {
   margin-top: 0.15rem;
 }
 
+.queue-radio {
+  color: var(--accent);
+  text-transform: capitalize;
+}
+
+.radio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.2rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.radio-section.on {
+  border-color: var(--accent);
+}
+
+.radio-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.radio-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text2);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.radio-switch-knob {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--border2);
+  transition: background 0.15s;
+}
+
+.radio-switch-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s;
+}
+
+.radio-switch.on {
+  color: var(--accent);
+}
+
+.radio-switch.on .radio-switch-knob {
+  background: var(--accent);
+}
+
+.radio-switch.on .radio-switch-knob::after {
+  transform: translateX(12px);
+}
+
+.radio-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--text3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radio-matches.none {
+  color: var(--red);
+}
+
+.radio-taste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.radio-taste .tag-facet {
+  width: 100%;
+}
+
+.radio-wave {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.radio-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+}
+
+.radio-step-phase {
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.radio-step.current {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
 .queue-diff {
   padding: 0 0.35rem;
   border-radius: 3px;
