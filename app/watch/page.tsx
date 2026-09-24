@@ -119,13 +119,6 @@ function WatchInner() {
   const [markerViewH, setMarkerViewH] = useState(0)
   const [markerPitch, setMarkerPitch] = useState(MARKER_ROW_PITCH)
 
-  // ── Service Worker ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {})
-    }
-  }, [])
-
   // ── Load meta + bx sources ──────────────────────────────────────────────────
   useEffect(() => {
     if (!videoId) return

@@ -1,26 +1,16 @@
-const CACHE_NAME = 'bx-video-v1790027200'
 /**
- * BounceX Viewer – Service Worker
+ * BounceX Viewer: service worker kill switch.
  *
- * Video byte-range requests (seeking, moov discovery, buffering) pass straight
- * through to the network. The browser and server handle these natively — any SW
- * interception of Range requests corrupts the responses and breaks seeking.
+ * The old worker served pages, CSS and API reads cache-first, so every change
+ * needed a hard refresh. The app no longer registers a worker, but browsers that
+ * installed the old one keep running it until it is replaced. A browser rechecks
+ * this file on navigation, installs this stub, and the stub wipes the caches,
+ * unregisters itself and reloads its open tabs so they load straight from the
+ * network. It has no fetch handler, so nothing is intercepted meanwhile.
  *
- * Non-range requests (settings, manifests, first metadata load) are cached
- * normally so the app works offline and loads faster on repeat visits.
+ * Delete this file (and the /sw.js headers in next.config.ts) once every machine
+ * that ran the old worker has loaded the app once.
  */
-
-
-function isVideoRequest(url) {
-  try {
-    const u = new URL(url)
-    const path = u.pathname
-    if (!path.includes('/videos/')) return false
-    return /\.(mp4|webm|mkv|m4v)(\?|$)/i.test(path)
-  } catch {
-    return false
-  }
-}
 
 self.addEventListener('install', () => {
   self.skipWaiting()
@@ -28,66 +18,12 @@ self.addEventListener('install', () => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    Promise.all([
-      self.clients.claim(),
-      caches
-        .keys()
-        .then((keys) =>
-          Promise.all(
-            keys
-              .filter((key) => key !== CACHE_NAME)
-              .map((key) => caches.delete(key)),
-          ),
-        ),
-    ]),
-  )
-})
-
-function isMutableRequest(url) {
-  // These files are frequently updated — always fetch fresh.
-  try {
-    const path = new URL(url).pathname
-    return (
-      path.endsWith('/manifest.json') ||
-      path.endsWith('/meta.json') ||
-      path.endsWith('.bx') ||
-      path.endsWith('.js')
-    )
-  } catch {
-    return false
-  }
-}
-
-self.addEventListener('fetch', (event) => {
-  const { request } = event
-  if (request.method !== 'GET') return
-
-  // Pass ALL video requests straight through — Range or not.
-  // Caching a 10+ GB non-range response clones the entire response body,
-  // which stalls the stream the browser is reading for moov atom discovery.
-  if (isVideoRequest(request.url)) return
-
-  // manifest.json and meta.json must always be fresh so manager changes
-  // show immediately without a hard refresh.
-  if (isMutableRequest(request.url)) {
-    event.respondWith(fetch(request).catch(() => caches.match(request)))
-    return
-  }
-
-  // Non-video requests are safe to cache normally.
-  event.respondWith(
     (async () => {
-      const cache = await caches.open(CACHE_NAME)
-      const cached = await cache.match(request)
-      if (cached) return cached
-
-      const response = await fetch(request)
-      if (!response.ok) return response
-
-      try {
-        cache.put(request, response.clone())
-      } catch (_) {}
-      return response
+      const keys = await caches.keys()
+      await Promise.all(keys.map((key) => caches.delete(key)))
+      await self.registration.unregister()
+      const clients = await self.clients.matchAll({ type: 'window' })
+      for (const client of clients) client.navigate(client.url)
     })(),
   )
 })

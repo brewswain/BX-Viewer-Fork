@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run scripts/bump-sw.ts && bun run scripts/next.ts dev",
-    "build": "bun run scripts/bump-sw.ts && bun run scripts/next.ts build",
+    "dev": "bun run scripts/next.ts dev",
+    "build": "bun run scripts/next.ts build",
     "start": "bun run scripts/next.ts start",
     "typecheck": "tsc --noEmit",
     "test": "bun test",

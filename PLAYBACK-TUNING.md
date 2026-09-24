@@ -120,6 +120,7 @@ To make that revalidation cheap, `serveFile` emits an `ETag` derived from size a
 `If-None-Match` with a `304`, and honours `If-Range` so that a file replaced mid-stream cannot be
 stitched together from two different versions.
 
-`public/sw.js` passes all video requests straight through to the network, Range or not. Do not
-change this. A service worker that intercepts Range requests corrupts the responses and breaks
-seeking, and caching a non-range response for a 10+ GB file clones the entire body.
+There is no service worker any more (`public/sw.js` is only a stub that unregisters the old one).
+If one is ever reintroduced, it must pass every video request straight through, Range or not. A
+service worker that intercepts Range requests corrupts the responses and breaks seeking, and
+caching a non-range response for a 10+ GB file clones the entire body.
