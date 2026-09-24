@@ -579,8 +579,11 @@ body {
 }
 
 .card-authors {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.5rem;
+  row-gap: 0.15rem;
+  align-items: baseline;
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--accent);
@@ -590,7 +593,14 @@ body {
 .card-author-label {
   font-size: 0.65rem;
   color: var(--text2);
-  margin-right: 0.3rem;
+  white-space: nowrap;
+}
+
+.card-author-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-meta {

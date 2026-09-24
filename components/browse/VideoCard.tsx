@@ -207,13 +207,16 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
           ))}
         </div>
         <div className="card-title">{video.title || folder}</div>
+        {/* One row per credit, each clipped to a line: a compilation credit
+            lists several creators, and side by side the two wrapped into a
+            ragged pair of columns. The full credit is on hover. */}
         <div className="card-authors">
-          <span>
-            <span className="card-author-label">Video by:</span>
+          <span className="card-author-label">Video by</span>
+          <span className="card-author-value" title={video.videoCreator || 'Unknown'}>
             {video.videoCreator || 'Unknown'}
           </span>
-          <span>
-            <span className="card-author-label">Path by:</span>
+          <span className="card-author-label">Path by</span>
+          <span className="card-author-value" title={video.pathCreator || 'Unknown'}>
             {video.pathCreator || 'Unknown'}
           </span>
         </div>

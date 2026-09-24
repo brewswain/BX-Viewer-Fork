@@ -99,8 +99,8 @@ export default function PlaylistCard({
         </div>
         <div className="card-title">{p.title || p._id}</div>
         <div className="card-authors">
-          <span>
-            <span className="card-author-label">Playlist by:</span>
+          <span className="card-author-label">Playlist by</span>
+          <span className="card-author-value" title={p.author || 'Unknown'}>
             {p.author || 'Unknown'}
           </span>
         </div>
