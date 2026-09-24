@@ -127,6 +127,7 @@ const FURRY = new Set([
   'multi-pop',
   'sissy-big-toys-synth',
   'the-big-toy-night',
+  'F AROUND FIND OUT',
 ])
 const TOYS = new Set(['sissy-big-toys-synth', 'the-big-toy-night'])
 const SISSYGASM = new Set(['sissygasm-training', 'after-sissygasm'])
