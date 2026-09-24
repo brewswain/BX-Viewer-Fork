@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { Readable } from 'node:stream'
 
 const MIME: Record<string, string> = {
   '.mp4': 'video/mp4',
@@ -59,22 +58,66 @@ function parseRange(header: string, size: number): { start: number; end: number 
   return { start, end }
 }
 
+const CHUNK = 512 * 1024
+
 /**
+ * Bytes `start..end` (inclusive) of a file, read only when the consumer pulls.
+ *
  * A seek abandons the request in flight, so on a scrubbed video these are
- * cancelled far more often than they are read to the end. `Readable.toWeb`
- * destroys the node stream when the *web* stream is cancelled, but nothing
- * connects a client hanging up to that cancel, which leaves a read stream open
- * on a multi-GB file per abandoned seek. `request.signal` is the connection
- * between the two.
+ * cancelled far more often than they are read to the end. This used to be
+ * `Readable.toWeb(fs.createReadStream())`, whose adapter pushes data as the
+ * node stream produces it; a chunk landing after the client hung up hit an
+ * already-closed controller and surfaced as an uncaught
+ * "Invalid state: Controller is already closed", once per abandoned seek.
+ * Pull-based, nothing is enqueued unless the stream asked for it, and an
+ * enqueue that loses the race with a cancel throws inside `pull`, where the
+ * stream swallows it. `request.signal` closes the handle when the client goes,
+ * so an abandoned seek does not hold a multi-GB file open.
  */
-function toWebStream(
-  nodeStream: fs.ReadStream,
+function fileStream(
+  filePath: string,
+  start: number,
+  end: number,
   signal: AbortSignal,
 ): ReadableStream<Uint8Array> {
-  if (signal.aborted) nodeStream.destroy()
-  else
-    signal.addEventListener('abort', () => nodeStream.destroy(), { once: true })
-  return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>
+  let handle: fsp.FileHandle | null = null
+  let pos = start
+  const release = () => {
+    const h = handle
+    handle = null
+    void h?.close().catch(() => {})
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async start() {
+        if (signal.aborted) return
+        handle = await fsp.open(filePath, 'r')
+        signal.addEventListener('abort', release, { once: true })
+      },
+      async pull(controller) {
+        const h = handle
+        const want = Math.min(CHUNK, end - pos + 1)
+        if (!h || want <= 0) {
+          release()
+          controller.close()
+          return
+        }
+        const buf = new Uint8Array(want)
+        const { bytesRead } = await h.read(buf, 0, want, pos)
+        if (bytesRead === 0) {
+          release()
+          controller.close()
+          return
+        }
+        pos += bytesRead
+        controller.enqueue(bytesRead === want ? buf : buf.subarray(0, bytesRead))
+      },
+      cancel: release,
+    },
+    // One chunk of read-ahead, so the disk read overlaps the socket write.
+    { highWaterMark: 1 },
+  )
 }
 
 /**
@@ -148,15 +191,15 @@ export async function serveFile(filePath: string, request: Request): Promise<Res
       'Content-Length': String(length),
     }
     if (isHead) return new Response(null, { status: 206, headers })
-    return new Response(
-      toWebStream(fs.createReadStream(filePath, { start, end }), request.signal),
-      { status: 206, headers },
-    )
+    return new Response(fileStream(filePath, start, end, request.signal), {
+      status: 206,
+      headers,
+    })
   }
 
   const headers = { ...base, 'Content-Length': String(size) }
   if (isHead) return new Response(null, { status: 200, headers })
-  return new Response(toWebStream(fs.createReadStream(filePath), request.signal), {
+  return new Response(fileStream(filePath, 0, size - 1, request.signal), {
     status: 200,
     headers,
   })

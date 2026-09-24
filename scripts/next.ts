@@ -7,6 +7,7 @@
  */
 import { spawn } from 'node:child_process'
 import { readlinkSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 function readlinkReportsEisdir(): boolean {
@@ -27,10 +28,34 @@ if (readlinkReportsEisdir()) {
   env.NODE_OPTIONS = [env.NODE_OPTIONS, `--require "${shim}"`].filter(Boolean).join(' ')
 }
 
-const child = spawn('next', process.argv.slice(2), { stdio: 'inherit', env, shell: true })
+/**
+ * Node on next's JS entry, not `next` through a shell. On Windows the shell
+ * route runs node_modules/.bin/next.cmd, a batch file, and Ctrl+C on a batch
+ * file stops at cmd's "Terminate batch job (Y/N)?" prompt. With stdio shared
+ * and this process waiting on it, that read as the server hanging on Ctrl+C.
+ */
+const nextBin = createRequire(import.meta.url).resolve('next/dist/bin/next')
+const child = spawn('node', [nextBin, ...process.argv.slice(2)], { stdio: 'inherit', env })
+
+/**
+ * Ctrl+C reaches every process on the console, next included, so the first one
+ * just waits for next to shut itself down. If it has not within a few seconds,
+ * or on a second Ctrl+C, the whole tree goes: `next dev` runs its server in a
+ * grandchild, which killing the child alone would leave holding the port.
+ */
+let interrupts = 0
+function killTree() {
+  if (child.exitCode !== null || !child.pid) return
+  if (process.platform === 'win32') spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'])
+  else child.kill('SIGKILL')
+}
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    if (++interrupts > 1) killTree()
+    else setTimeout(killTree, 5000).unref()
+  })
+}
 
 child.on('exit', (code, signal) => {
-  // Re-raise the signal rather than swallowing it, so Ctrl+C still stops the server.
-  if (signal) process.kill(process.pid, signal)
-  else process.exit(code ?? 0)
+  process.exit(code ?? (signal ? 130 : 0))
 })
