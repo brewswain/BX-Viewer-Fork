@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import DevicePanel from '@/components/player/DevicePanel'
+import { isPlainClick, usePlay } from '@/components/queue/PlayGate'
 import QueueMenu from '@/components/queue/QueueMenu'
 import QueuePanel from '@/components/queue/QueuePanel'
 import { upcoming } from '@/lib/queue/queue'
@@ -1093,6 +1094,7 @@ const PLACEHOLDER_STYLE = {
 } as const
 
 function MoreVideos({ suggestions }: { suggestions: Suggestions }) {
+  const play = usePlay()
   if (suggestions.state === 'loading')
     return <div style={PLACEHOLDER_STYLE}>Loading…</div>
   if (suggestions.state === 'empty')
@@ -1115,6 +1117,19 @@ function MoreVideos({ suggestions }: { suggestions: Suggestions }) {
             className="more-video-card"
             href={`/watch?v=${encodeURIComponent(folder)}`}
             key={idx}
+            onClick={(e) => {
+              if (!isPlainClick(e)) return
+              e.preventDefault()
+              play(m.title || folder, [
+                {
+                  folder,
+                  title: m.title,
+                  thumbnail: m.thumbnail,
+                  tags: m.tags,
+                  durationSecs: m.durationSecs,
+                },
+              ])
+            }}
           >
             {thumbSrc ? (
               /* eslint-disable-next-line @next/next/no-img-element */

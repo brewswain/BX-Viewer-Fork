@@ -22,6 +22,13 @@ export type QueueItem = {
   durationSecs?: number
   /** Set on rows the radio added: which wave step picked it. */
   radio?: RadioMark
+  /**
+   * Added by hand while something else plays. These cut in ahead of the rest,
+   * in the order they were added, like Spotify's "Next in queue".
+   */
+  added?: boolean
+  /** The .bx file a playlist entry picked, when it is not the video's default. */
+  bxFile?: string
 }
 
 export type Queue = {
@@ -31,6 +38,8 @@ export type Queue = {
    * queue runs out, so running dry does not wipe what was built.
    */
   current: string | null
+  /** What the queue was started from ("Next from: ..."), if anything. */
+  source?: string
 }
 
 export const EMPTY_QUEUE: Queue = { items: [], current: null }
@@ -61,8 +70,47 @@ export function append(q: Queue, video: QueueVideo, uid = newUid()): Queue {
 export function playNext(q: Queue, video: QueueVideo, uid = newUid()): Queue {
   const at = currentIndex(q) + 1
   const items = [...q.items]
-  items.splice(at, 0, { ...video, uid })
+  items.splice(at, 0, { ...video, added: true, uid })
   return { ...q, items }
+}
+
+/** Where the next hand-added row goes: after the playing item and earlier adds. */
+function addedEnd(q: Queue): number {
+  let at = currentIndex(q) + 1
+  while (at < q.items.length && q.items[at].added) at++
+  return at
+}
+
+/**
+ * Add to "Next in queue": ahead of the rest of the queue but after anything
+ * added before, so adding L, M, N while A plays gives A, L, M, N, B, C.
+ */
+export function enqueue(q: Queue, videos: readonly QueueVideo[], uid = newUid): Queue {
+  const at = addedEnd(q)
+  const items = [...q.items]
+  items.splice(at, 0, ...videos.map((v) => ({ ...v, added: true, uid: uid() })))
+  return { ...q, items }
+}
+
+/**
+ * Add after everything. A waiting radio pick goes, since radio only fills a
+ * dry queue; it picks again once these have played.
+ */
+export function appendAll(q: Queue, videos: readonly QueueVideo[], uid = newUid): Queue {
+  const cur = currentIndex(q)
+  const kept = q.items.filter((it, i) => i <= cur || !it.radio)
+  return { ...q, items: [...kept, ...videos.map((v) => ({ ...v, uid: uid() }))] }
+}
+
+/** A fresh queue of `videos`, the first marked as playing. */
+export function replace(videos: readonly QueueVideo[], source?: string, uid = newUid): Queue {
+  const items = videos.map((v) => ({ ...v, uid: uid() }))
+  return { items, current: items[0]?.uid ?? null, ...(source ? { source } : {}) }
+}
+
+/** Whether anything queued is still to play; radio's look-ahead does not count. */
+export function hasPending(q: Queue): boolean {
+  return upcoming(q).some((i) => !i.radio)
 }
 
 /**
@@ -107,7 +155,8 @@ export function parseQueue(raw: string | null): Queue {
       typeof parsed.current === 'string' && items.some((i) => i.uid === parsed.current)
         ? parsed.current
         : null
-    return { items, current }
+    const source = typeof parsed.source === 'string' && parsed.source ? parsed.source : undefined
+    return { items, current, ...(source ? { source } : {}) }
   } catch {
     return EMPTY_QUEUE
   }

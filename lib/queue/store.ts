@@ -54,8 +54,13 @@ export function getQueue(): Q.Queue {
   return read()
 }
 
-export const addToQueue = (video: Q.QueueVideo) => update((q) => Q.append(q, video))
+/** Raw append, for radio's own picks. */
+export const appendToQueue = (video: Q.QueueVideo) => update((q) => Q.append(q, video))
+export const addToQueue = (...videos: Q.QueueVideo[]) => update((q) => Q.enqueue(q, videos))
+export const addToEnd = (...videos: Q.QueueVideo[]) => update((q) => Q.appendAll(q, videos))
 export const addNext = (video: Q.QueueVideo) => update((q) => Q.playNext(q, video))
+export const replaceQueue = (videos: Q.QueueVideo[], source?: string) =>
+  update(() => Q.replace(videos, source))
 export const removeFromQueue = (uid: string) => update((q) => Q.remove(q, uid))
 export const moveInQueue = (uid: string, to: number) => update((q) => Q.move(q, uid, to))
 export const setQueueCurrent = (uid: string | null) => update((q) => Q.setCurrent(q, uid))

@@ -14,7 +14,7 @@ import { useSyncExternalStore } from 'react'
 
 import * as Q from './queue'
 import { pickNext, parseRadio, type RadioCandidate, type RadioSettings } from './radio'
-import { addToQueue, getQueue } from './store'
+import { appendToQueue, getQueue } from './store'
 
 const KEY = 'bx_radio'
 
@@ -90,7 +90,7 @@ export function radioTopUp(ended?: readonly string[]): Promise<string | null> {
       if (already) return already.uid
       const pick = pickNext(q, getRadio(), videos, Math.random, ended)
       if (!pick) return null
-      const after = addToQueue({ ...pick.video, radio: pick.mark })
+      const after = appendToQueue({ ...pick.video, radio: pick.mark })
       return after.items[after.items.length - 1].uid
     } catch {
       return null

@@ -3,7 +3,9 @@
 import Link from 'next/link'
 import { useState } from 'react'
 
-export type PlaylistVideoRef = string | { id?: string; videoId?: string }
+import { isPlainClick, usePlay, videosFor } from '@/components/queue/PlayGate'
+
+export type PlaylistVideoRef = string | { id?: string; videoId?: string; bxFile?: string }
 
 export type PlaylistMeta = {
   /** Manifest folder id, stamped on at fetch time (legacy `_id`). */
@@ -49,6 +51,15 @@ export default function PlaylistCard({
 }) {
   const p = playlist
   const videoCount = (p.videos || []).length
+  const play = usePlay()
+
+  async function playAll() {
+    const entries = (p.videos || []).flatMap((v) => {
+      const folder = typeof v === 'string' ? v : v.id || v.videoId
+      return folder ? [{ folder, bxFile: typeof v === 'string' ? undefined : v.bxFile }] : []
+    })
+    play(p.title || p._id, await videosFor(entries))
+  }
 
   // Try to get thumbnail from first video
   const first = p.videos && p.videos[0]
@@ -72,6 +83,11 @@ export default function PlaylistCard({
       className="video-card"
       href={`/playlist?p=${encodeURIComponent(p._id)}`}
       style={{ animationDelay: `${index * 0.04}s` }}
+      onClick={(e) => {
+        if (!isPlainClick(e)) return
+        e.preventDefault()
+        void playAll()
+      }}
     >
       <div className="card-thumb">
         {thumbSrc && !thumbFailed ? (

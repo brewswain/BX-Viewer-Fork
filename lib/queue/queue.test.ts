@@ -7,6 +7,43 @@ function build(...folders: string[]): Q.Queue {
   return folders.reduce((q, f) => Q.append(q, v(f), f), Q.EMPTY_QUEUE)
 }
 
+describe('next in queue', () => {
+  const folders = (q: Q.Queue) => q.items.map((i) => i.folder)
+  let n = 0
+  const uid = () => `u${n++}`
+
+  it('adds cut in after the playing video, in the order added', () => {
+    let q = Q.replace(['a', 'b', 'c', 'd', 'e'].map(v), 'Liked', uid)
+    expect(q.current).toBe(q.items[0].uid)
+    expect(q.source).toBe('Liked')
+    q = Q.enqueue(q, [v('l')], uid)
+    q = Q.enqueue(q, [v('m'), v('n')], uid)
+    expect(folders(q)).toEqual(['a', 'l', 'm', 'n', 'b', 'c', 'd', 'e'])
+    expect(q.items.filter((i) => i.added).map((i) => i.folder)).toEqual(['l', 'm', 'n'])
+  })
+
+  it('once the adds have played, a new one leads again', () => {
+    let q = Q.enqueue(Q.replace([v('a'), v('b')], undefined, uid), [v('l')], uid)
+    q = Q.setCurrent(q, q.items[1].uid) // playing l
+    q = Q.enqueue(q, [v('m')], uid)
+    expect(folders(q)).toEqual(['a', 'l', 'm', 'b'])
+  })
+
+  it('add to end drops a waiting radio pick but keeps the rest', () => {
+    let q = Q.replace([v('a')], undefined, uid)
+    q = Q.append(q, { folder: 'r', radio: { phase: 'build', level: 0, step: 0 } })
+    expect(Q.hasPending(q)).toBe(false)
+    q = Q.appendAll(q, [v('x')], uid)
+    expect(folders(q)).toEqual(['a', 'x'])
+    expect(Q.hasPending(q)).toBe(true)
+  })
+
+  it('source survives a round trip through storage', () => {
+    const q = Q.replace([v('a')], 'Mix', uid)
+    expect(Q.parseQueue(JSON.stringify(q)).source).toBe('Mix')
+  })
+})
+
 describe('queue', () => {
   it('appends in order and allows the same video twice', () => {
     const q = Q.append(build('a', 'b'), v('a'), 'a2')

@@ -157,7 +157,13 @@ export default function QueuePanel({ onPlay, isPlayer = false }: Props) {
   }
 
   const nowRows = cur >= 0 ? [row(items[cur], cur)] : []
-  const nextRows = items.slice(cur + 1).map((it, i) => row(it, cur + 1 + i))
+  // Hand-added rows lead, then the rest of what the queue was started from,
+  // matching the order they play in.
+  const next = items.slice(cur + 1)
+  const addedCount = next.findIndex((it) => !it.added)
+  const splitAt = addedCount < 0 ? next.length : addedCount
+  const addedRows = next.slice(0, splitAt).map((it, i) => row(it, cur + 1 + i))
+  const restRows = next.slice(splitAt).map((it, i) => row(it, cur + 1 + splitAt + i))
   const playedRows = items.slice(0, Math.max(cur, 0)).map((it, i) => row(it, i))
   const startUid = playStartUid(queue)
 
@@ -273,8 +279,14 @@ export default function QueuePanel({ onPlay, isPlayer = false }: Props) {
           {showPlayed && playedRows}
           {nowRows.length > 0 && <div className="queue-section">Now playing</div>}
           {nowRows}
-          {nextRows.length > 0 && <div className="queue-section">Next up</div>}
-          {nextRows}
+          {addedRows.length > 0 && <div className="queue-section">Next in queue</div>}
+          {addedRows}
+          {restRows.length > 0 && (
+            <div className="queue-section">
+              {queue.source ? `Next from: ${queue.source}` : addedRows.length ? 'Then' : 'Next up'}
+            </div>
+          )}
+          {restRows}
         </div>
       )}
     </div>

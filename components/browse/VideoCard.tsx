@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { isPlainClick, usePlay } from '@/components/queue/PlayGate'
 import QueueMenu from '@/components/queue/QueueMenu'
 
 export type VideoMeta = {
@@ -134,6 +135,14 @@ export function ThumbPlaceholder() {
 
 export default function VideoCard({ video, index }: { video: VideoMeta; index: number }) {
   const folder = video._folder || video.videoId || ''
+  const play = usePlay()
+  const queueVideo = {
+    folder,
+    title: video.title,
+    thumbnail: video.thumbnail,
+    tags: video.tags,
+    durationSecs: video.durationSecs,
+  }
   const thumbSrc = video.thumbnail
     ? `/videos/${encodeURIComponent(folder)}/${encodeURIComponent(video.thumbnail)}`
     : null
@@ -174,6 +183,11 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
       className="video-card"
       href={`/watch?v=${encodeURIComponent(folder)}`}
       style={{ animationDelay: `${index * 0.04}s` }}
+      onClick={(e) => {
+        if (!isPlainClick(e)) return
+        e.preventDefault()
+        play(video.title || folder, [queueVideo])
+      }}
     >
       <div className="card-thumb">
         {thumbSrc && !thumbFailed ? (
@@ -187,16 +201,7 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
         ) : (
           <ThumbPlaceholder />
         )}
-        <QueueMenu
-          className="card-queue-menu"
-          video={{
-            folder,
-            title: video.title,
-            thumbnail: video.thumbnail,
-            tags: video.tags,
-            durationSecs: video.durationSecs,
-          }}
-        />
+        <QueueMenu className="card-queue-menu" video={queueVideo} />
       </div>
       <div className="card-body">
         <div className="card-highlight-tags">

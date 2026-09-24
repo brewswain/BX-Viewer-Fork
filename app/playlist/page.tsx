@@ -227,7 +227,10 @@ function PlaylistInner() {
       const queue = id === QUEUE_PLAYLIST_ID ? getQueue() : null
       try {
         const playlist: PlaylistMeta = queue
-          ? { title: QUEUE_TITLE, videos: queue.items.map((i) => i.folder) }
+          ? {
+              title: QUEUE_TITLE,
+              videos: queue.items.map((i) => (i.bxFile ? { id: i.folder, bxFile: i.bxFile } : i.folder)),
+            }
           : quick
             ? await quickPlaylistMeta()
             : await fetchJSON<PlaylistMeta>(
@@ -465,7 +468,7 @@ function PlaylistInner() {
     void (async () => {
       const byUid = new Map(oldUids.map((u, i) => [u, cur.metas[i]]))
       const metas = await Promise.all(
-        queue.items.map((it) => byUid.get(it.uid) ?? trackMeta(it.folder, null, true)),
+        queue.items.map((it) => byUid.get(it.uid) ?? trackMeta(it.folder, it.bxFile ?? null, true)),
       )
       if (cancelled) return
       const next: Loaded = {

@@ -9,7 +9,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { addNext, addToQueue } from '@/lib/queue/store'
+import { addNext, addToEnd, addToQueue } from '@/lib/queue/store'
 import { addToPlaylist, listPlaylistChoices, type PlaylistChoice } from '@/lib/queue/playlists'
 import type { QueueVideo } from '@/lib/queue/queue'
 import { setQueueDrawerOpen } from './queueUi'
@@ -124,6 +124,15 @@ export default function QueueMenu({ video, className }: Props) {
               }}
             >
               Play next
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                addToEnd(video)
+                done('Added to end')
+              }}
+            >
+              Add to end of queue
             </button>
             <button
               role="menuitem"

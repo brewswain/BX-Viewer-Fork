@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 
+import PlayGate from '@/components/queue/PlayGate'
 import QueueDrawer from '@/components/queue/QueueDrawer'
 import { setQueueDrawerOpen, useQueueDrawerOpen } from '@/components/queue/queueUi'
 import { upcoming } from '@/lib/queue/queue'
@@ -125,6 +126,7 @@ export default function SiteHeader({
         <QueueButton />
       </nav>
       <QueueDrawer />
+      <PlayGate />
     </header>
   )
 }

@@ -6213,6 +6213,79 @@ body:has(.manager-layout) {
   color: var(--text);
 }
 
+/* Asked before Play would clear a queue with videos still waiting. Above the
+   drawer, since the drawer's own rows can start a play. */
+.play-gate-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.play-gate {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2700;
+  width: min(420px, calc(100vw - 32px));
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  padding: 1.25rem 1.25rem 1.1rem;
+}
+
+.play-gate h2 {
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  margin: 0 1.5rem 0.5rem 0;
+}
+
+.play-gate p {
+  color: var(--text2);
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.play-gate p strong {
+  color: var(--text);
+}
+
+.play-gate-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.play-gate-actions .queue-btn {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+}
+
+.play-gate .play-gate-done {
+  margin: 0.5rem 0;
+  color: var(--text);
+  text-align: center;
+}
+
+.play-gate-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.7rem;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+
+.play-gate-close:hover {
+  color: var(--text);
+}
+
 .queue-panel {
   display: flex;
   flex-direction: column;

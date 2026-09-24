@@ -11,6 +11,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/SiteHeader'
+import { isPlainClick, usePlay } from '@/components/queue/PlayGate'
 import Pager from '@/components/browse/Pager'
 import TagSidebar from '@/components/browse/TagSidebar'
 import FilterBar, {
@@ -101,6 +102,7 @@ const FILTER_KEYS: FilterKey[] = [
 
 function Browse() {
   const searchParams = useSearchParams()
+  const play = usePlay()
 
   // ── State ────────────────────────────────────────────────────────────────
   const [videos, setVideos] = useState<VideoMeta[]>([])
@@ -335,7 +337,23 @@ function Browse() {
       e.preventDefault()
       return
     }
+    // A modified click opens the old temporary playlist in a new tab.
     prepareQuickPlaylist(shuffle)
+    if (!isPlainClick(e)) return
+    e.preventDefault()
+    const videos = filtered.flatMap((v) => {
+      const folder = v._folder || v.videoId
+      return folder
+        ? [{ folder, title: v.title, thumbnail: v.thumbnail, tags: v.tags, durationSecs: v.durationSecs }]
+        : []
+    })
+    if (shuffle) {
+      for (let i = videos.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[videos[i], videos[j]] = [videos[j], videos[i]]
+      }
+    }
+    play(isFiltered ? 'Filtered videos' : 'All videos', videos)
   }
 
   const filteredPlaylists = playlists.filter((p) =>
