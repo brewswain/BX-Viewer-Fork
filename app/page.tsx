@@ -11,6 +11,8 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/SiteHeader'
+import Pager from '@/components/browse/Pager'
+import TagSidebar from '@/components/browse/TagSidebar'
 import FilterBar, {
   emptyFilters,
   type ActiveFilters,
@@ -19,7 +21,9 @@ import FilterBar, {
 import PlaylistCard, { type PlaylistMeta } from '@/components/browse/PlaylistCard'
 import VideoCard, { type VideoMeta } from '@/components/browse/VideoCard'
 import ViewToggle, { type ViewMode } from '@/components/browse/ViewToggle'
+import { matchesSelection, type MatchMode } from '@/lib/browse/facets'
 import { filterByCategory } from '@/lib/browse/tagFilter'
+import { getSettings, setSettings } from '@/lib/settings'
 import { loadPlaylistPrefs, savePlaylistPrefs } from '@/lib/player/playback'
 import {
   QUICK_PLAYLIST_ID,
@@ -39,6 +43,51 @@ const LIBRARY_API = '/api/library'
 type LibraryResponse = {
   videos: VideoMeta[]
   playlists: PlaylistMeta[]
+}
+
+const PAGE_SIZE = 24
+
+type Selection = { tags: string[]; mode: MatchMode }
+
+const SEL_KEY = { videos: 'bx_browse_sel_videos', playlists: 'bx_browse_sel_playlists' }
+
+/** The tab's own selection if it has one, else the saved default (videos only). */
+function initialSelection(panel: 'videos' | 'playlists'): Selection {
+  try {
+    const raw = sessionStorage.getItem(SEL_KEY[panel])
+    if (raw) return JSON.parse(raw) as Selection
+  } catch {
+    /* fall through to the default */
+  }
+  if (panel === 'playlists') return { tags: [], mode: 'or' }
+  const s = getSettings()
+  return { tags: s.browseDefaultTags, mode: s.browseDefaultMode }
+}
+
+function storeSelection(panel: 'videos' | 'playlists', sel: Selection) {
+  try {
+    sessionStorage.setItem(SEL_KEY[panel], JSON.stringify(sel))
+  } catch {
+    /* session-only convenience */
+  }
+}
+
+/**
+ * The page number is remembered against the filter state it was picked under,
+ * so any change to filters, search or the sidebar lands back on page 1 without
+ * an effect racing the render.
+ */
+function usePage(filterKey: string) {
+  const [state, setState] = useState({ key: filterKey, page: 1 })
+  const page = state.key === filterKey ? state.page : 1
+  const setPage = useCallback(
+    (p: number) => {
+      setState({ key: filterKey, page: p })
+      window.scrollTo({ top: 0 })
+    },
+    [filterKey],
+  )
+  return [page, setPage] as const
 }
 
 const FILTER_KEYS: FilterKey[] = [
@@ -67,6 +116,41 @@ function Browse() {
 
   const [activeTab, setActiveTab] = useState<'videos' | 'playlists'>('videos')
   const [filters, setFilters] = useState<ActiveFilters>(emptyFilters)
+
+  // Seeded empty so the server render matches; the real selection comes from
+  // storage on mount, before the library request can resolve.
+  const [videoSel, setVideoSel] = useState<Selection>({ tags: [], mode: 'or' })
+  const [playlistSel, setPlaylistSel] = useState<Selection>({ tags: [], mode: 'or' })
+  useEffect(() => {
+    // A tag link from the watch page selects just that tag; a search link has
+    // to see the whole library, or the default selection would hide its hits.
+    const tag = searchParams.get('tag')
+    if (tag) setVideoSel({ tags: [tag.toLowerCase()], mode: 'or' })
+    else if (searchParams.get('q')) setVideoSel({ tags: [], mode: 'or' })
+    else setVideoSel(initialSelection('videos'))
+    setPlaylistSel(initialSelection('playlists'))
+  }, [searchParams])
+
+  const changeVideoSel = useCallback((tags: string[], mode: MatchMode) => {
+    const sel = { tags, mode }
+    storeSelection('videos', sel)
+    setVideoSel(sel)
+  }, [])
+
+  const changePlaylistSel = useCallback((tags: string[], mode: MatchMode) => {
+    const sel = { tags, mode }
+    storeSelection('playlists', sel)
+    setPlaylistSel(sel)
+  }, [])
+
+  const resetVideoSel = useCallback(() => {
+    const s = getSettings()
+    changeVideoSel(s.browseDefaultTags, s.browseDefaultMode)
+  }, [changeVideoSel])
+
+  const saveVideoSelAsDefault = useCallback(() => {
+    setSettings({ browseDefaultTags: videoSel.tags, browseDefaultMode: videoSel.mode })
+  }, [videoSel])
 
   // `?q=` prefills the box verbatim; the query itself is lower-cased (legacy
   // did not trim this one).
@@ -200,12 +284,19 @@ function Browse() {
     })
   }
 
+  // The sidebar narrows what the dropdowns and search left, and counts against
+  // that same list so its numbers say what a click would show.
+  const sidebarBase = filtered
+  filtered = filtered.filter((v) => matchesSelection(v.tags, videoSel.tags, videoSel.mode))
+
   const videoCount = videosLoaded
     ? `${filtered.length} video${filtered.length !== 1 ? 's' : ''}`
     : '— videos'
 
   const isFiltered =
-    searchQuery !== '' || FILTER_KEYS.some((k) => filters[k].size > 0)
+    searchQuery !== '' ||
+    videoSel.tags.length > 0 ||
+    FILTER_KEYS.some((k) => filters[k].size > 0)
 
   const playAllDisabled = !videosLoaded || filtered.length === 0
 
@@ -247,18 +338,35 @@ function Browse() {
     prepareQuickPlaylist(shuffle)
   }
 
+  const filteredPlaylists = playlists.filter((p) =>
+    matchesSelection(p.tags, playlistSel.tags, playlistSel.mode),
+  )
+  const playlistTotal = filteredPlaylists.length
   const playlistCount =
     playlistsState === 'loading'
       ? '— playlists'
       : playlistsState === 'error'
         ? '0 playlists'
-        : `${playlists.length} playlist${playlists.length !== 1 ? 's' : ''}`
+        : `${playlistTotal} playlist${playlistTotal !== 1 ? 's' : ''}`
 
   // Rebuilt whenever the legacy renderGrid() would have re-created the cards,
   // so the staggered entry animation replays as it did before.
-  const gridKey = `${libraryVersion}|${searchQuery}|${FILTER_KEYS.map((k) =>
-    [...filters[k]].join(','),
+  const filterKey = `${searchQuery}|${videoSel.mode}:${videoSel.tags.join(',')}|${FILTER_KEYS.map(
+    (k) => [...filters[k]].join(','),
   ).join('|')}`
+  const [videoPage, setVideoPage] = usePage(filterKey)
+  const videoPageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const shownVideos = filtered.slice((videoPage - 1) * PAGE_SIZE, videoPage * PAGE_SIZE)
+  const gridKey = `${libraryVersion}|${filterKey}|${videoPage}`
+
+  const [playlistPage, setPlaylistPage] = usePage(
+    `${playlistSel.mode}:${playlistSel.tags.join(',')}`,
+  )
+  const playlistPageCount = Math.max(1, Math.ceil(filteredPlaylists.length / PAGE_SIZE))
+  const shownPlaylists = filteredPlaylists.slice(
+    (playlistPage - 1) * PAGE_SIZE,
+    playlistPage * PAGE_SIZE,
+  )
 
   return (
     <>
@@ -354,34 +462,47 @@ function Browse() {
               />
             </div>
           </div>
-          {videosLoaded ? (
-            <FilterBar videos={videos} filters={filters} onChange={setFilters} />
-          ) : (
-            <div className="tag-filter" id="tagFilter" />
-          )}
-          <div
-            className={`video-grid${videoViewMode === 'list' ? ' list-view' : ''}`}
-            id="videoGrid"
-          >
-            {videosError ? (
-              <div className="error-msg">
-                Could not load manifest.
-                <br />
-                <small>{videosError}</small>
+          <div className="browse-layout">
+            <TagSidebar
+              entries={sidebarBase}
+              selected={videoSel.tags}
+              mode={videoSel.mode}
+              onChange={changeVideoSel}
+              onDefault={resetVideoSel}
+              onSaveDefault={saveVideoSelAsDefault}
+            />
+            <div className="browse-main">
+              {videosLoaded ? (
+                <FilterBar videos={videos} filters={filters} onChange={setFilters} />
+              ) : (
+                <div className="tag-filter" id="tagFilter" />
+              )}
+              <div
+                className={`video-grid${videoViewMode === 'list' ? ' list-view' : ''}`}
+                id="videoGrid"
+              >
+                {videosError ? (
+                  <div className="error-msg">
+                    Could not load manifest.
+                    <br />
+                    <small>{videosError}</small>
+                  </div>
+                ) : !videosLoaded ? (
+                  <div className="loading-msg">Loading videos…</div>
+                ) : filtered.length === 0 ? (
+                  <div className="empty-state">No videos match your search.</div>
+                ) : (
+                  shownVideos.map((v, i) => (
+                    <VideoCard
+                      key={`${gridKey}::${v._folder || v.videoId || i}`}
+                      video={v}
+                      index={i}
+                    />
+                  ))
+                )}
               </div>
-            ) : !videosLoaded ? (
-              <div className="loading-msg">Loading videos…</div>
-            ) : filtered.length === 0 ? (
-              <div className="empty-state">No videos match your search.</div>
-            ) : (
-              filtered.map((v, i) => (
-                <VideoCard
-                  key={`${gridKey}::${v._folder || v.videoId || i}`}
-                  video={v}
-                  index={i}
-                />
-              ))
-            )}
+              <Pager page={videoPage} pageCount={videoPageCount} onPage={setVideoPage} />
+            </div>
           </div>
         </div>
 
@@ -402,21 +523,38 @@ function Browse() {
               listBtnId="btnListViewPlaylists"
             />
           </div>
-          <div
-            className={`video-grid${playlistViewMode === 'list' ? ' list-view' : ''}`}
-            id="playlistGrid"
-          >
-            {playlistsState === 'loading' ? (
-              <div className="loading-msg">Loading playlists…</div>
-            ) : playlistsState === 'error' ? (
-              <div className="empty-state">No playlists found.</div>
-            ) : playlists.length === 0 ? (
-              <div className="empty-state">No playlists yet.</div>
-            ) : (
-              playlists.map((p, i) => (
-                <PlaylistCard key={p._id} playlist={p} index={i} />
-              ))
-            )}
+          <div className="browse-layout">
+            <TagSidebar
+              entries={playlists}
+              selected={playlistSel.tags}
+              mode={playlistSel.mode}
+              onChange={changePlaylistSel}
+            />
+            <div className="browse-main">
+              <div
+                className={`video-grid${playlistViewMode === 'list' ? ' list-view' : ''}`}
+                id="playlistGrid"
+              >
+                {playlistsState === 'loading' ? (
+                  <div className="loading-msg">Loading playlists…</div>
+                ) : playlistsState === 'error' ? (
+                  <div className="empty-state">No playlists found.</div>
+                ) : playlists.length === 0 ? (
+                  <div className="empty-state">No playlists yet.</div>
+                ) : filteredPlaylists.length === 0 ? (
+                  <div className="empty-state">No playlists match these tags.</div>
+                ) : (
+                  shownPlaylists.map((p, i) => (
+                    <PlaylistCard key={`${playlistPage}::${p._id}`} playlist={p} index={i} />
+                  ))
+                )}
+              </div>
+              <Pager
+                page={playlistPage}
+                pageCount={playlistPageCount}
+                onPage={setPlaylistPage}
+              />
+            </div>
           </div>
         </div>
       </main>

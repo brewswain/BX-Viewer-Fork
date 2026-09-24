@@ -89,6 +89,13 @@ export type Settings = {
    * and stays pinned to loopback by default.
    */
   ossmAppUrl: string
+  /**
+   * The sidebar selection the browse page opens with. The page's own clicks
+   * last for the tab (sessionStorage) and never write back here. An empty list
+   * opens on the whole library.
+   */
+  browseDefaultTags: string[]
+  browseDefaultMode: 'and' | 'or'
 }
 
 export const DEFAULTS: Settings = {
@@ -134,6 +141,9 @@ export const DEFAULTS: Settings = {
   deviceOffsetMs: 0,
   deviceMinCmdMs: 100,
   ossmAppUrl: '',
+  // The T&S-style BX Studio videos are the best synthesized ones so far.
+  browseDefaultTags: ['thingsnstuff style'],
+  browseDefaultMode: 'or',
 }
 
 export function getSettings(): Settings {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import SiteHeader from '@/components/SiteHeader'
+import { FACETS, tagLabel } from '@/lib/browse/facets'
 import { deviceManager } from '@/lib/device/manager'
 import {
   RATE_RANGE,
@@ -68,6 +69,8 @@ type FormState = {
   deviceRangeMax: string
   deviceOffsetMs: string
   deviceMinCmdMs: string
+  browseDefaultTags: string[]
+  browseDefaultMode: 'and' | 'or'
 }
 
 function rgbaToHex(rgba: string): string | null {
@@ -123,6 +126,8 @@ function toForm(s: Settings): FormState {
     deviceRangeMax: String(Math.round(s.deviceRangeMax * 100)),
     deviceOffsetMs: String(s.deviceOffsetMs),
     deviceMinCmdMs: String(s.deviceMinCmdMs),
+    browseDefaultTags: Array.isArray(s.browseDefaultTags) ? s.browseDefaultTags : [],
+    browseDefaultMode: s.browseDefaultMode === 'and' ? 'and' : 'or',
   }
 }
 
@@ -195,6 +200,8 @@ export default function SettingsPage() {
       deviceRangeMax: clamp01(num(form.deviceRangeMax, 100) / 100),
       deviceOffsetMs: num(form.deviceOffsetMs, 0),
       deviceMinCmdMs: Math.max(20, num(form.deviceMinCmdMs, DEFAULTS.deviceMinCmdMs)),
+      browseDefaultTags: form.browseDefaultTags,
+      browseDefaultMode: form.browseDefaultMode,
     })
     // The manager is live across pages, so a save has to reach it immediately —
     // otherwise the change would not apply until the next video load.
@@ -497,6 +504,57 @@ export default function SettingsPage() {
                 sticks for the rest of that session, so this only applies to the
                 first video you open in a tab.
               </p>
+            </section>
+
+            <section className="settings-section">
+              <h2 className="settings-section-title">Browse default</h2>
+              <p className="settings-hint">
+                The tags the video grid opens with. Clicks in the sidebar only
+                last for the tab; this is where every visit starts. Pick nothing
+                to open on the whole library.
+              </p>
+              <div className="tag-mode" role="radiogroup" aria-label="Combine default tags">
+                {(['or', 'and'] as const).map((m) => (
+                  <button
+                    type="button"
+                    key={m}
+                    role="radio"
+                    aria-checked={form.browseDefaultMode === m}
+                    className={`tag-mode-btn${form.browseDefaultMode === m ? ' active' : ''}`}
+                    onClick={() => set('browseDefaultMode', m)}
+                  >
+                    {m === 'or' ? 'Any' : 'All'}
+                  </button>
+                ))}
+              </div>
+              {FACETS.map((f) => (
+                <div className="tag-facet" key={f.key}>
+                  <div className="tag-facet-label">{f.label}</div>
+                  <div className="tag-facet-btns">
+                    {f.tags.map((t) => {
+                      const on = form.browseDefaultTags.includes(t)
+                      return (
+                        <button
+                          type="button"
+                          key={t}
+                          className={`tag-btn${on ? ' active' : ''}`}
+                          aria-pressed={on}
+                          onClick={() =>
+                            set(
+                              'browseDefaultTags',
+                              on
+                                ? form.browseDefaultTags.filter((x) => x !== t)
+                                : [...form.browseDefaultTags, t],
+                            )
+                          }
+                        >
+                          {tagLabel(t)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </section>
 
             <section className="settings-section">

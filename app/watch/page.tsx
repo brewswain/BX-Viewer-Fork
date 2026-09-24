@@ -875,7 +875,7 @@ function WatchInner() {
               )}
               {tags.map((t, i) => (
                 <Link
-                  href={`/?q=${encodeURIComponent(t)}`}
+                  href={`/?tag=${encodeURIComponent(t)}`}
                   className="video-tag"
                   key={i}
                 >

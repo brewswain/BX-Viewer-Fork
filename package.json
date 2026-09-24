@@ -9,6 +9,7 @@
     "start": "bun run scripts/next.ts start",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "retag": "bun run scripts/retag.ts",
     "sim": "bun run scripts/buttplug-sim.ts"
   },
   "dependencies": {

@@ -5733,3 +5733,203 @@ body:has(.manager-layout) {
 .ossm-panel-compact .ossm-plan {
   padding: 0.5rem 0.55rem;
 }
+
+/* ── Browse sidebar + pager ── */
+.browse-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.browse-main {
+  min-width: 0;
+}
+
+/* Sticks under the header and the page tabs (60px + ~42px). */
+.tag-sidebar {
+  position: sticky;
+  top: 7rem;
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding-right: 0.25rem;
+}
+
+.tag-sidebar-head,
+.tag-sidebar-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tag-mode {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.tag-sidebar .tag-mode {
+  margin-bottom: 0;
+}
+
+.tag-mode-btn {
+  background: var(--surface);
+  border: none;
+  color: var(--text2);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+}
+
+.tag-mode-btn + .tag-mode-btn {
+  border-left: 1px solid var(--border);
+}
+
+.tag-mode-btn.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+.tag-sidebar-link {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  white-space: nowrap;
+}
+
+.tag-sidebar-link:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.tag-sidebar-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tag-facet-label {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 0.45rem;
+}
+
+.settings-section .tag-facet {
+  margin-bottom: 0.9rem;
+}
+
+.tag-facet-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  padding: 0.25rem 0.65rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+
+.tag-btn:hover {
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.tag-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+.tag-btn-count {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text3);
+}
+
+.tag-btn.active .tag-btn-count {
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 2rem;
+}
+
+.pager-btn {
+  min-width: 2.2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text2);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.pager-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pager-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pager-gap {
+  color: var(--text3);
+  padding: 0 0.2rem;
+}
+
+/* Narrow screens: the sidebar becomes a band of chips above the grid. */
+@media (max-width: 900px) {
+  .browse-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .tag-sidebar {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    gap: 0.8rem;
+  }
+}
