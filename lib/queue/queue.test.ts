@@ -32,7 +32,7 @@ describe('next in queue', () => {
   it('add to end drops a waiting radio pick but keeps the rest', () => {
     let q = Q.replace([v('a')], undefined, uid)
     q = Q.append(q, { folder: 'r', radio: { phase: 'build', level: 0, step: 0 } })
-    expect(Q.hasPending(q)).toBe(false)
+    expect(Q.hasPending(q)).toBe(true)
     q = Q.appendAll(q, [v('x')], uid)
     expect(folders(q)).toEqual(['a', 'x'])
     expect(Q.hasPending(q)).toBe(true)

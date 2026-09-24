@@ -143,7 +143,7 @@ export default function PlayGate() {
   }, [done])
 
   if (!req) return null
-  const left = upcoming(getQueue()).filter((i) => !i.radio).length
+  const left = upcoming(getQueue()).length
   const what = req.videos.length === 1 ? (req.videos[0].title ?? req.title) : req.title
 
   return createPortal(

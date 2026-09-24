@@ -18,7 +18,7 @@ import { isPlainClick, usePlay } from '@/components/queue/PlayGate'
 import QueueMenu from '@/components/queue/QueueMenu'
 import QueuePanel from '@/components/queue/QueuePanel'
 import { upcoming } from '@/lib/queue/queue'
-import { radioTopUp } from '@/lib/queue/radioStore'
+import { radioTopUp, useRadio } from '@/lib/queue/radioStore'
 import { queueHref, useQueue } from '@/lib/queue/store'
 import OssmExportPanel from '@/components/player/OssmExportPanel'
 import PlayerControls from '@/components/player/PlayerControls'
@@ -91,13 +91,25 @@ function WatchInner() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [activeBxIndex, setActiveBxIndex] = useState(0)
   const [sidebarTab, setSidebarTab] = useState<'bx' | 'more' | 'queue'>('more')
-  const queueLeft = upcoming(useQueue()).length
+  const queue = useQueue()
+  const queueLeft = upcoming(queue).length
   // The engine's `onEnded` is built once per video; a ref keeps it off a stale router.
   const router = useRouter()
   const routerRef = useRef(router)
   useEffect(() => {
     routerRef.current = router
   }, [router])
+
+  // When this video is the queue's playing row, keep radio's next pick waiting
+  // from the start, like the queue player does, instead of picking only once
+  // it ends. A video opened outside the queue still picks on `ended`.
+  const radio = useRadio()
+  const currentFolder = queue.items.find((i) => i.uid === queue.current)?.folder
+  const loadedTags = loaded?.id === videoId ? loaded?.meta.tags : undefined
+  useEffect(() => {
+    if (!radio.enabled || !loadedTags || currentFolder !== videoId || queueLeft > 0) return
+    void radioTopUp(loadedTags)
+  }, [radio, currentFolder, videoId, loadedTags, queueLeft])
   const [stats, setStats] = useState<{ duration: string; frames: string }>({
     duration: '–',
     frames: '–',

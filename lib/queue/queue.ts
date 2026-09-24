@@ -108,9 +108,12 @@ export function replace(videos: readonly QueueVideo[], source?: string, uid = ne
   return { items, current: items[0]?.uid ?? null, ...(source ? { source } : {}) }
 }
 
-/** Whether anything queued is still to play; radio's look-ahead does not count. */
+/**
+ * Whether anything queued is still to play. Radio's look-ahead counts: a
+ * radio session is a running queue too, and Play would end it.
+ */
 export function hasPending(q: Queue): boolean {
-  return upcoming(q).some((i) => !i.radio)
+  return upcoming(q).length > 0
 }
 
 /**
