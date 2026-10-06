@@ -41,6 +41,7 @@ import {
   type DeviceBackend,
   type OutputMapping,
 } from './types'
+import { frameOf, type BenchKind, type BenchRecorder } from './bench'
 
 /** Never ask for a move shorter than this — below it, hardware just slams. */
 const MIN_MOVE_MS = 20
@@ -101,8 +102,30 @@ export class StrokeDriver {
   /** Suppresses repeat `stop()` calls while sitting paused. */
   private stopped = true
 
-  /** Diagnostics for the UI — cheap counters, no allocation on the hot path. */
-  readonly stats = { sent: 0, skipped: 0, seeks: 0, lastPos: 0, lastDur: 0 }
+  /**
+   * Diagnostics for the UI — cheap counters, no allocation on the hot path.
+   *
+   * `lastLateMs` and `lastMerged` joined for the bench HUD: a command storm and
+   * a fall-behind are the two things that look, on the rail, exactly like a
+   * machine that cannot keep up, and neither is visible in the other four.
+   */
+  readonly stats = {
+    sent: 0,
+    skipped: 0,
+    seeks: 0,
+    lastPos: 0,
+    lastDur: 0,
+    lastLateMs: 0,
+    lastMerged: 0,
+  }
+
+  /**
+   * Set while a bench run is being recorded; null the rest of the time, which is
+   * the normal case and costs one null check per issued move.
+   */
+  private recorder: BenchRecorder | null = null
+  /** Whether the frame currently being handled re-anchored. Read by `send`. */
+  private seekFrame = false
 
   setBackend(backend: DeviceBackend | null): void {
     if (this.backend === backend) return
@@ -124,6 +147,14 @@ export class StrokeDriver {
 
   getOptions(): DriverOptions {
     return this.opts
+  }
+
+  /**
+   * Attach or detach the bench recorder. Passing null is the resting state, so
+   * an ordinary playthrough pays one null check per issued move and nothing else.
+   */
+  setRecorder(recorder: BenchRecorder | null): void {
+    this.recorder = recorder
   }
 
   /**
@@ -203,18 +234,30 @@ export class StrokeDriver {
     // Collapse everything already due into a single move. `dueIdx` ends on the
     // last command whose start time has passed.
     let dueIdx = -1
+    let merged = 0
     while (this.idx < cmds.length && cmds[this.idx].t <= planMs) {
-      if (dueIdx >= 0) this.stats.skipped++
+      if (dueIdx >= 0) {
+        this.stats.skipped++
+        merged++
+      }
       dueIdx = this.idx
       this.idx++
     }
+
+    this.seekFrame = jumped
 
     if (dueIdx >= 0) {
       const cmd = cmds[dueIdx]
       // Shorten by however late we are, so the move still lands on schedule.
       // The floor keeps a badly-late command from becoming a slam.
       const late = planMs - cmd.t
-      this.send(cmd.pos, Math.max(MIN_MOVE_MS, (cmd.dur - late) / speed))
+      this.send(cmd.pos, Math.max(MIN_MOVE_MS, (cmd.dur - late) / speed), {
+        videoMs,
+        cmdMs: cmd.t,
+        kind: 'cmd',
+        merged,
+        lateMs: late,
+      })
       return
     }
 
@@ -233,14 +276,44 @@ export class StrokeDriver {
     this.send(
       depthAt(this.plan.segments, planMs),
       Math.min(this.opts.seekSettleMs, budget),
+      { videoMs, cmdMs: null, kind: 'anchor', merged: 0, lateMs: 0 },
     )
   }
 
-  private send(depth: number, durMs: number): void {
+  /**
+   * `meta` is only read by the bench recorder, and it is a plain object literal
+   * built at each of the two call sites rather than fields on the driver,
+   * because the two sites disagree about every one of them and threading it
+   * through state is how an anchor ends up logged as a path command.
+   */
+  private send(
+    depth: number,
+    durMs: number,
+    meta: {
+      videoMs: number
+      cmdMs: number | null
+      kind: BenchKind
+      merged: number
+      lateMs: number
+    },
+  ): void {
     const pos = mapDepth(depth, this.opts.mapping)
     this.stats.sent++
     this.stats.lastPos = pos
     this.stats.lastDur = durMs
+    this.stats.lastLateMs = meta.lateMs
+    this.stats.lastMerged = meta.merged
+    this.recorder?.record({
+      frame: frameOf(meta.videoMs),
+      videoMs: meta.videoMs,
+      cmdMs: meta.cmdMs,
+      pos,
+      dur: durMs,
+      kind: meta.kind,
+      merged: meta.merged,
+      lateMs: meta.lateMs,
+      seek: this.seekFrame,
+    })
     this.backend?.move(pos, durMs)
   }
 }

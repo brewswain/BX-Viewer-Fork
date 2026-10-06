@@ -15,6 +15,8 @@
 
 import { buildStrokePlan, DEFAULT_LINEARIZE } from './plan'
 import { EMPTY_PLAN, StrokeDriver, type StrokePlan } from './driver'
+import { BenchRecorder } from './bench'
+import { FPS } from '@/lib/player/constants'
 import { ButtplugBackend, DEFAULT_BUTTPLUG_URL } from './buttplug'
 import { DEFAULT_XTOYS_URL, XToysBackend } from './xtoys'
 import { DEFAULT_OSSM_URL, OssmDirectBackend } from './ossmDirect'
@@ -91,6 +93,13 @@ export type DeviceState = {
   planCommands: number
   log: string[]
   config: DeviceConfig
+  /**
+   * True while the bench recorder is armed. In the state rather than read off
+   * the recorder, because the HUD has to be able to show that a run is being
+   * captured without polling, and a run nobody can see is running is the one
+   * that gets thrown away.
+   */
+  recording: boolean
 }
 
 const MAX_LOG = 60
@@ -103,6 +112,7 @@ const INITIAL: DeviceState = {
   planCommands: 0,
   log: [],
   config: DEFAULT_DEVICE_CONFIG,
+  recording: false,
 }
 
 class DeviceManager {
@@ -170,7 +180,19 @@ class DeviceManager {
       this.disconnect()
     }
 
-    if (prev.minCmdMs !== config.minCmdMs) this.replan()
+    if (prev.minCmdMs !== config.minCmdMs) {
+      // Logged unconditionally, because the bench runs segments 4, 5 and 7 twice
+      // at 100 and at 20 and a run whose threshold is not written down anywhere
+      // is not readable afterwards. A change mid-recording also invalidates the
+      // header the log was armed with, so the recording stops rather than
+      // silently describing a plan that no longer exists.
+      this.addLog(`minCmdMs ${prev.minCmdMs} -> ${config.minCmdMs}, replanning`)
+      if (this.state.recording) {
+        this.addLog('Bench recording stopped: the plan it was recording has been rebuilt')
+        this.stopBench()
+      }
+      this.replan()
+    }
     this.updateArmed()
 
     if (!config.enabled) this.driver.setRunning(false)
@@ -280,6 +302,62 @@ class DeviceManager {
   /** Live counters for the diagnostics panel. Read, never subscribed. */
   get stats() {
     return this.driver.stats
+  }
+
+  // ── Bench recording ────────────────────────────────────────────────────────
+  //
+  // The middle layer of the bench chain: what the fork commanded, as against the
+  // `.bx` on disk and the carriage the camera sees. See `bench.ts` for why this
+  // is part of the instrument rather than an improvement to it, and for why it
+  // is not evidence about `k`.
+
+  private readonly recorder = new BenchRecorder()
+
+  /**
+   * Arm the recorder for one run. `label` is whatever the page knows about what
+   * is playing and goes into the header verbatim.
+   *
+   * **The header is taken at arm time and `minCmdMs` is the one field that makes
+   * the log readable**, so arming after changing the threshold is the correct
+   * order and arming before it silently records the wrong number. `configure`
+   * replans on a `minCmdMs` change, which is also the moment the plan the log
+   * describes stops existing, so a change while armed disarms rather than
+   * carrying on.
+   */
+  startBench(label = ''): void {
+    const c = this.state.config
+    this.recorder.arm({
+      startedAt: new Date().toISOString(),
+      minCmdMs: c.minCmdMs,
+      leadMs: this.driver.getOptions().leadMs,
+      offsetMs: c.offsetMs,
+      rangeMin: c.rangeMin,
+      rangeMax: c.rangeMax,
+      invert: c.invert,
+      backend: c.backend,
+      planCommands: this.state.planCommands,
+      label,
+      fps: FPS,
+    })
+    this.driver.setRecorder(this.recorder)
+    this.addLog(`Bench recording armed at minCmdMs=${c.minCmdMs}`)
+    this.patch({ recording: true })
+  }
+
+  stopBench(): void {
+    if (!this.recorder.isArmed()) return
+    this.driver.setRecorder(null)
+    this.addLog(`Bench recording stopped, ${this.recorder.count()} moves`)
+    this.patch({ recording: false })
+  }
+
+  benchCount(): number {
+    return this.recorder.count()
+  }
+
+  /** The log as CSV. Kept as a string so the caller decides where it goes. */
+  benchCsv(): string {
+    return this.recorder.toCsv()
   }
 
   /**
