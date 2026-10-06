@@ -39,8 +39,11 @@
 
 import { FPS } from '@/lib/player/constants'
 
-/** Why a move was issued. `anchor` is the post-seek correction, not a path command. */
-export type BenchKind = 'cmd' | 'anchor'
+/**
+ * Why a move was issued. `anchor` is the post-seek correction and `retract` the
+ * slow withdrawal a track swap forces; neither is a path command.
+ */
+export type BenchKind = 'cmd' | 'anchor' | 'retract'
 
 export type BenchEntry = {
   /** Video frame the move was issued at, from the `videoMs` the driver was ticked with. */

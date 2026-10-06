@@ -257,8 +257,11 @@ class DeviceManager {
    * rather than incrementally.
    */
   setMarkers(markers: Marker[]): void {
+    // A re-render handing back the same array is not a swap, and gating it
+    // would sit the machine out for a stroke for nothing.
+    if (markers === this.markers) return
     this.markers = markers
-    this.replan()
+    this.replan(true)
   }
 
   clearMarkers(): void {
@@ -269,7 +272,12 @@ class DeviceManager {
     this.updateArmed()
   }
 
-  private replan(): void {
+  /**
+   * `swap` is true when the markers are a different track (a difficulty swap
+   * or the next playlist entry), which must hand over through the driver's
+   * withdrawal gate; false when the same track is being rebuilt.
+   */
+  private replan(swap = false): void {
     if (this.markers.length < 2) {
       this.driver.setPlan(EMPTY_PLAN)
       this.patch({ planCommands: 0 })
@@ -280,7 +288,8 @@ class DeviceManager {
       ...DEFAULT_LINEARIZE,
       minCmdMs: this.state.config.minCmdMs,
     })
-    this.driver.setPlan(plan)
+    if (swap) this.driver.swapPlan(plan)
+    else this.driver.setPlan(plan)
     this.patch({ planCommands: plan.commands.length })
     this.updateArmed()
   }
@@ -379,6 +388,16 @@ class DeviceManager {
   /** Called once, from the singleton construction below. */
   init(): this {
     this.watchVisibility()
+    this.driver.onSwap = (phase) =>
+      this.addLog(
+        phase === 'leave'
+          ? 'Track swap: finishing the old track until the machine is out'
+          : phase === 'retract'
+            ? 'Track swap: old track did not come out, retracting slowly'
+            : phase === 'out'
+              ? 'Track swap: out, holding until the new track comes out'
+              : 'Track swap: new track joined',
+      )
     return this
   }
 

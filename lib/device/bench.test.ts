@@ -172,11 +172,13 @@ describe('StrokeDriver with a recorder attached', () => {
 
   test('a jump forward logs the collapse rather than hiding it', () => {
     const { rec, d } = rig()
-    d.tick(0, true)
+    // Through the opening catch-up glide, which an unknown position makes the
+    // full 1.5 s, and onto the path proper.
+    for (let t = 0; t <= 1504; t += 16) d.tick(t, true)
     // Land well past several due commands without tripping the seek threshold,
     // so they collapse into one move: that is the fall-behind case, and on the
     // rail it looks exactly like a machine that could not keep up.
-    d.tick(240, true)
+    d.tick(1744, true)
     const last = rec.snapshot().entries.at(-1)!
     expect(last.merged).toBeGreaterThan(0)
     expect(last.lateMs).toBeGreaterThan(0)
@@ -194,8 +196,8 @@ describe('StrokeDriver with a recorder attached', () => {
 
   test('the counters the HUD reads move with the log', () => {
     const { rec, d } = rig()
-    d.tick(0, true)
-    d.tick(240, true)
+    for (let t = 0; t <= 1504; t += 16) d.tick(t, true)
+    d.tick(1744, true)
     expect(d.stats.sent).toBe(rec.count())
     expect(d.stats.lastMerged).toBe(rec.snapshot().entries.at(-1)!.merged)
   })

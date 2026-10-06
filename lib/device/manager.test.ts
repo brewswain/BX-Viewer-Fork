@@ -79,13 +79,16 @@ describe('deviceManager end to end', () => {
     deviceManager.setMarkers(strokeMarkers())
 
     expect(deviceManager.getSnapshot().armed).toBe(true)
-    playThrough(0, 2200)
+    // The first move is the capped catch-up from an unknown position: 1.5 s
+    // onto the stroke ending at 1500, then the path itself.
+    playThrough(0, 3200)
     await until(() => sim.moves.length >= 4)
 
     // Alternating extremes, in order.
     const positions = sim.moves.map((mv) => Math.round(mv.position))
     expect(positions.slice(0, 4)).toEqual([1, 0, 1, 0])
-    for (const mv of sim.moves) {
+    expect(sim.moves[0].duration).toBe(1500)
+    for (const mv of sim.moves.slice(1)) {
       expect(mv.duration).toBeGreaterThan(0)
       expect(mv.duration).toBeLessThanOrEqual(1000)
     }
@@ -116,14 +119,14 @@ describe('deviceManager end to end', () => {
     const sim = startSim()
     await connectTo(sim)
     deviceManager.setMarkers(strokeMarkers())
-    playThrough(0, 1200)
+    playThrough(0, 1700)
     await until(() => sim.moves.length >= 2)
 
     const before = sim.moves.length
     deviceManager.clearMarkers()
     await until(() => sim.stops >= 1)
 
-    playThrough(1216, 3000)
+    playThrough(1716, 3000)
     await wait(50)
     expect(sim.moves).toHaveLength(before)
     expect(deviceManager.getSnapshot().armed).toBe(false)
@@ -134,13 +137,13 @@ describe('deviceManager end to end', () => {
     await connectTo(sim)
     deviceManager.setMarkers(strokeMarkers())
 
-    playThrough(0, 700)
+    playThrough(0, 1700)
     await until(() => sim.moves.length >= 2)
-    deviceManager.tick(700, false)
+    deviceManager.tick(1700, false)
     await until(() => sim.stops >= 1)
 
     const before = sim.moves.length
-    playThrough(700, 1600)
+    playThrough(1700, 3600)
     await until(() => sim.moves.length > before)
   })
 
@@ -162,7 +165,7 @@ describe('deviceManager end to end', () => {
     await connectTo(sim, { invert: true })
     deviceManager.setMarkers(strokeMarkers())
 
-    playThrough(0, 1200)
+    playThrough(0, 1700)
     await until(() => sim.moves.length >= 2)
     // Without invert the first command targets depth 1.
     expect(Math.round(sim.moves[0].position)).toBe(0)
@@ -189,12 +192,15 @@ describe('deviceManager end to end', () => {
     await connectTo(sim, { offsetMs: 400 })
     deviceManager.setMarkers(strokeMarkers())
 
-    // Video time 0..300 is plan time −400..−100: before the path begins.
+    // Video time 0..300 is plan time −400..−100: before the path begins. The
+    // catch-up is aimed at the stroke ending at plan 1500, which the offset
+    // puts at video 1900, so the path proper starts after that.
     playThrough(0, 300)
     await wait(50)
     const early = sim.moves.length
+    expect(early).toBe(1)
 
-    playThrough(316, 1200)
+    playThrough(316, 2400)
     await until(() => sim.moves.length > early)
   })
 
