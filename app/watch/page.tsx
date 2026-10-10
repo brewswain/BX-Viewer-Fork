@@ -199,7 +199,7 @@ function WatchInner() {
             const raw = await fetchText(url)
             try {
               // Support plain .bx, version:2 at root, and new meta.version structure
-              const { markerData, effects } = parseBx(JSON.parse(raw))
+              const { markerData, effects, governor } = parseBx(JSON.parse(raw))
               const markers = markersFromData(markerData)
               return {
                 label: b.label || 'Default',
@@ -207,6 +207,7 @@ function WatchInner() {
                 data: markerData,
                 effects,
                 peaks: findPeaks(markers),
+                governor,
               }
             } catch (e) {
               throw new Error(
@@ -344,7 +345,9 @@ function WatchInner() {
   useEffect(() => {
     const config = deviceConfigFromSettings(getSettings())
     deviceManager.configure(config)
-    if (activeMarkers.length >= 2) deviceManager.setMarkers(activeMarkers)
+    if (activeMarkers.length >= 2) {
+      deviceManager.setMarkers(activeMarkers, loaded?.bxSources[activeBxIndex]?.governor)
+    }
     else deviceManager.clearMarkers()
     if (config.enabled && config.autoConnect && !deviceManager.isConnected()) {
       void deviceManager.connect()

@@ -4,7 +4,7 @@
  */
 
 import { VIDEO_BASE } from './constants'
-import type { BxEffect, Marker, MarkerData, RawBx } from './types'
+import type { BxEffect, BxGovernor, Marker, MarkerData, RawBx } from './types'
 
 // ── Godot 4 Tween Easing ─────────────────────────────────────────────────────
 // TransitionType: 0=Linear 1=Sine 2=Quint 3=Quart 4=Quad 5=Expo
@@ -171,12 +171,19 @@ export function peaksFromMarkerData(markerData: MarkerData): number[] {
 export function parseBx(parsed: unknown): {
   markerData: MarkerData
   effects: BxEffect[]
+  governor: BxGovernor
 } {
   const p = (parsed ?? {}) as RawBx
   const isBx2 = p.version === 2 || p.meta?.version === 2
   const markerData = (isBx2 ? p.markers : (parsed as MarkerData)) ?? {}
   const effects = isBx2 && Array.isArray(p.effects) ? p.effects : []
-  return { markerData, effects }
+  // A v1 file is a bare marker map, so a frame keyed "meta" is not ours to read.
+  const m = isBx2 ? p.meta : undefined
+  const governor: BxGovernor = {
+    governorLevel: typeof m?.governorLevel === 'string' ? m.governorLevel : 'unknown',
+    capsHash: typeof m?.capsHash === 'string' ? m.capsHash : 'unknown',
+  }
+  return { markerData, effects, governor }
 }
 
 // ── Custom font loader ────────────────────────────────────────────────────────

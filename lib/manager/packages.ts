@@ -7,7 +7,13 @@ import { PLAYLIST_BASE, VIDEO_BASE, isValidId } from '@/lib/paths'
 import { bumpVersion } from '@/lib/version'
 import { tallyPlaylistDuration } from './duration'
 import { errorMessage } from './endpoints'
-import { moveInto, pathExists, rmrf, round3 } from './fsx'
+import {
+  describeDuplicates,
+  entryVideoId,
+  findDuplicateEntries,
+  type EntryLike,
+} from '@/lib/player/playlistEntries'
+import { moveInto, pathExists, readJsonStrict, rmrf, round3 } from './fsx'
 import {
   manifestExists,
   readManifest,
@@ -34,6 +40,34 @@ function parseMetaField(form: ParsedForm): { meta: Meta } | { error: NextRespons
   const meta = asMeta(parsed)
   if (!meta) return { error: jsonError('Invalid meta JSON: expected an object', 400) }
   return { meta }
+}
+
+/** A video's default `.bx`, read the way the player picks it; null if unknown. */
+async function defaultBxOf(videoId: string): Promise<string | null> {
+  try {
+    const m = asMeta(await readJsonStrict(path.join(VIDEO_BASE, videoId, 'meta.json')))
+    const first = Array.isArray(m?.bxFiles) ? asMeta(m.bxFiles[0]) : null
+    if (typeof first?.file === 'string') return first.file
+    return typeof m?.bxFile === 'string' ? m.bxFile : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The entry rule (see `playlistEntries.ts`), enforced here too so a hand-built
+ * POST cannot write an exact repeat. Defaults are resolved only for repeated
+ * videos, so an unpinned entry and one pinning the default file still collide.
+ */
+async function duplicateEntriesError(videos: unknown): Promise<NextResponse | null> {
+  if (!Array.isArray(videos)) return null
+  const entries = videos.filter((e): e is EntryLike => typeof e === 'string' || !!asMeta(e))
+  const ids = entries.map(entryVideoId)
+  const repeated = [...new Set(ids.filter((id, i) => id && ids.indexOf(id) !== i))]
+  const defaults = new Map<string, string | null>()
+  for (const id of repeated) if (isValidId(id)) defaults.set(id, await defaultBxOf(id))
+  const dups = findDuplicateEntries(entries, (id) => defaults.get(id))
+  return dups.length ? jsonError(describeDuplicates(dups), 400) : null
 }
 
 /** Move every `font_0`, `font_1`, … part into the package folder. */
@@ -257,6 +291,8 @@ export async function createPlaylist(request: Request): Promise<NextResponse> {
     const parsed = parseMetaField(form)
     if ('error' in parsed) return parsed.error
     const meta = parsed.meta
+    const dupError = await duplicateEntriesError(meta.videos)
+    if (dupError) return dupError
 
     await fs.mkdir(folderPath, { recursive: false })
     try {
@@ -307,8 +343,10 @@ export async function updatePlaylist(request: Request, folderId: string): Promis
     const parsed = parseMetaField(form)
     if ('error' in parsed) return parsed.error
     const meta = parsed.meta
+    const dupError = await duplicateEntriesError(meta.videos)
+    if (dupError) return dupError
 
-    const newFolderId = (form.fields.newFolderId ?? folderId).trim() || folderId
+    const newFolderId =(form.fields.newFolderId ?? folderId).trim() || folderId
     if (!isValidId(newFolderId)) return jsonError('Invalid new folder ID', 400)
 
     if (newFolderId !== folderId) {

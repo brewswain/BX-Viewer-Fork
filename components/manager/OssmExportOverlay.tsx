@@ -72,6 +72,9 @@ type ExportGroup = {
 
 type GroupPlan = { group: ExportGroup; plan: OssmPlan | null; error: string | null }
 
+/** One playlist entry (or loose video) headed for a group, with its pin. */
+type GroupEntry = { id: string; pin: string | null }
+
 function entryId(entry: PlaylistVideoEntry): string {
   return typeof entry === 'string' ? entry : entry.id || entry.videoId || ''
 }
@@ -272,6 +275,25 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
     }
   }
 
+  /**
+   * Videos a selected playlist lists more than once (a difficulty ladder). The
+   * rule makes each occurrence a different path, so collapsing them to one
+   * per-video answer would export the same path N times; each entry keeps its own.
+   */
+  const repeatedIds = new Set<string>()
+  for (const p of selectedPlaylists) {
+    const ids = (p.videos || []).map(entryId)
+    ids.forEach((id, i) => id && ids.indexOf(id) !== i && repeatedIds.add(id))
+  }
+
+  /** A repeated video's entry: its own pin when the meta still lists it, else the default. */
+  function entryFile(videoId: string, pin: string | null): string | null {
+    const meta = videoById.get(videoId)
+    const variants = meta ? bxFilesOf(meta) : []
+    if (pin && variants.some((v) => v.file === pin)) return pin
+    return variants[0]?.file ?? null
+  }
+
   function exportable(videoId: string): boolean {
     const meta = videoById.get(videoId)
     return !!meta && bxFilesOf(meta).length > 0
@@ -329,16 +351,16 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
     key: string,
     label: string,
     playlistTitle: string | null,
-    ids: string[],
+    entries: GroupEntry[],
   ): ExportGroup {
     const items: OssmRequest['items'] = []
     const skips: Skip[] = []
-    for (const id of ids) {
+    for (const { id, pin } of entries) {
       if (!videoById.has(id)) {
         skips.push({ videoId: id, reason: 'not in library' })
         continue
       }
-      const { file } = resolve(id)
+      const file = repeatedIds.has(id) ? entryFile(id, pin) : resolve(id).file
       if (!file) {
         skips.push({ videoId: id, reason: 'no .bx path' })
         continue
@@ -348,12 +370,12 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
     return { key, label, playlistTitle, items, skips }
   }
 
-  /** Entry ids a selected playlist contributes: the selected ones, plus the
+  /** Entries a selected playlist contributes: the selected ones, plus the
    *  unselectable ones so they can be reported as skips. */
-  function playlistIds(p: PlaylistMeta): string[] {
+  function playlistEntries(p: PlaylistMeta): GroupEntry[] {
     return (p.videos || [])
-      .map(entryId)
-      .filter((id) => id && (selVideos.has(id) || !exportable(id)))
+      .map((e) => ({ id: entryId(e), pin: entryPin(e) }))
+      .filter(({ id }) => id && (selVideos.has(id) || !exportable(id)))
   }
 
   const inPlaylists = new Set<string>()
@@ -371,26 +393,35 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
       // One request, so at most one `.bxpl` — and with several playlists in
       // play there is no single right name for it. Export paths only.
       const seen = new Set<string>()
-      const ordered: string[] = []
-      const push = (id: string) => {
-        if (seen.has(id)) return
-        seen.add(id)
-        ordered.push(id)
+      const ordered: GroupEntry[] = []
+      const push = (e: GroupEntry) => {
+        // A repeated video's entries are distinct paths, so they dedupe per path.
+        const key = repeatedIds.has(e.id) ? JSON.stringify([e.id, entryFile(e.id, e.pin)]) : e.id
+        if (seen.has(key)) return
+        seen.add(key)
+        ordered.push(e)
       }
-      for (const p of selectedPlaylists) playlistIds(p).forEach(push)
-      looseIds.forEach(push)
+      for (const p of selectedPlaylists) playlistEntries(p).forEach(push)
+      looseIds.forEach((id) => push({ id, pin: null }))
       return ordered.length ? [makeGroup('__all__', 'All selected', null, ordered)] : []
     }
 
     const out: ExportGroup[] = []
     for (const p of selectedPlaylists) {
-      const ids = playlistIds(p)
-      if (!ids.length) continue
+      const entries = playlistEntries(p)
+      if (!entries.length) continue
       const title = p.title || p._id
-      out.push(makeGroup(p._id, title, title, ids))
+      out.push(makeGroup(p._id, title, title, entries))
     }
     if (looseIds.length)
-      out.push(makeGroup('__loose__', 'Loose videos', null, looseIds))
+      out.push(
+        makeGroup(
+          '__loose__',
+          'Loose videos',
+          null,
+          looseIds.map((id) => ({ id, pin: null })),
+        ),
+      )
     return out
   }
 
@@ -675,6 +706,18 @@ export default function OssmExportOverlay({ api, showToast }: Props) {
   })
 
   function variantCell(videoId: string) {
+    if (repeatedIds.has(videoId)) {
+      // No single dropdown answer exists: each entry exports its own path.
+      const files = [...new Set(pins.get(videoId) || [])]
+      return (
+        <span
+          className="export-item-sub"
+          title={`A selected playlist lists this video more than once; each entry exports its own path (${files.join(', ') || 'default'}).`}
+        >
+          per entry
+        </span>
+      )
+    }
     const { variants, file, pinned, pinIgnored, overridden } = resolve(videoId)
     if (!file)
       return (

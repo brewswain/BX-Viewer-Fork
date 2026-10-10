@@ -26,7 +26,9 @@ import type {
   DeviceBackend,
   DeviceInfo,
 } from './types'
-import type { Marker } from '@/lib/player/types'
+import type { BxGovernor, Marker } from '@/lib/player/types'
+
+const UNKNOWN_GOVERNOR: BxGovernor = { governorLevel: 'unknown', capsHash: 'unknown' }
 
 export type DeviceConfig = {
   backend: BackendKind
@@ -122,6 +124,8 @@ class DeviceManager {
   private readonly driver = new StrokeDriver()
   /** Markers the current plan was built from, so config changes can replan. */
   private markers: Marker[] = []
+  /** The loaded `.bx`'s governor stamp, for the bench header. */
+  private governor: BxGovernor = UNKNOWN_GOVERNOR
 
   // ── React store ────────────────────────────────────────────────────────────
 
@@ -256,7 +260,9 @@ class DeviceManager {
    * full-length track costs a couple of milliseconds, so this is done on load
    * rather than incrementally.
    */
-  setMarkers(markers: Marker[]): void {
+  setMarkers(markers: Marker[], governor: BxGovernor = UNKNOWN_GOVERNOR): void {
+    // Before the same-array return: the stamp is cheap and must never go stale.
+    this.governor = governor
     // A re-render handing back the same array is not a swap, and gating it
     // would sit the machine out for a stroke for nothing.
     if (markers === this.markers) return
@@ -266,6 +272,7 @@ class DeviceManager {
 
   clearMarkers(): void {
     this.markers = []
+    this.governor = UNKNOWN_GOVERNOR
     this.driver.setPlan(EMPTY_PLAN)
     this.driver.setRunning(false)
     this.patch({ planCommands: 0 })
@@ -347,6 +354,8 @@ class DeviceManager {
       planCommands: this.state.planCommands,
       label,
       fps: FPS,
+      governorLevel: this.governor.governorLevel,
+      capsHash: this.governor.capsHash,
     })
     this.driver.setRecorder(this.recorder)
     this.addLog(`Bench recording armed at minCmdMs=${c.minCmdMs}`)

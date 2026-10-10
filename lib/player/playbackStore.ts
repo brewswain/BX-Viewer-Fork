@@ -38,8 +38,8 @@ export type PlaybackState = {
   position: number
   /** Playlist index of the playing track. */
   currentIndex: number
-  /** Folder id of the playing track; '' until the first track loads. */
-  currentFolder: string
+  /** Track key (`trackKeys`) of the playing track; empty until the first loads. */
+  currentKey: string
   /** Extra plays the playing track has had, for resolving a `once` repeat. */
   repeatsUsed: number
 }
@@ -50,7 +50,7 @@ const INITIAL: PlaybackState = {
   order: [],
   position: 0,
   currentIndex: 0,
-  currentFolder: '',
+  currentKey: '',
   repeatsUsed: 0,
 }
 
@@ -108,11 +108,11 @@ export function reshapeTracks(count: number, currentIndex: number, position: num
  * than incremented, because a track reached by clicking the sidebar is not
  * necessarily the next one in play order.
  */
-export function setCurrentTrack(index: number, folder: string): void {
+export function setCurrentTrack(index: number, key: string): void {
   const at = state.order.indexOf(index)
   set({
     currentIndex: index,
-    currentFolder: folder,
+    currentKey: key,
     position: at >= 0 ? at : 0,
     repeatsUsed: 0,
   })
@@ -128,13 +128,13 @@ export function reshuffle(count: number): void {
 }
 
 export function cycleLoop(): void {
-  setPrefs(cycleBarLoop(state.prefs, state.currentFolder))
+  setPrefs(cycleBarLoop(state.prefs, state.currentKey))
 }
 
-export function cycleTrackRepeat(folder: string): void {
+export function cycleTrackRepeat(key: string): void {
   // Changing the setting mid-play restarts the allowance for this pass.
-  if (folder === state.currentFolder) set({ repeatsUsed: 0 })
-  setPrefs(cycleRowLoop(state.prefs, folder, state.currentFolder))
+  if (key === state.currentKey) set({ repeatsUsed: 0 })
+  setPrefs(cycleRowLoop(state.prefs, key, state.currentKey))
 }
 
 /**

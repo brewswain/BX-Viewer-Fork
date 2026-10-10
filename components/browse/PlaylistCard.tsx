@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 
+import CardThumbImg from '@/components/browse/CardThumbImg'
 import { isPlainClick, usePlay, videosFor } from '@/components/queue/PlayGate'
 
 export type PlaylistVideoRef = string | { id?: string; videoId?: string; bxFile?: string }
@@ -91,11 +92,9 @@ export default function PlaylistCard({
     >
       <div className="card-thumb">
         {thumbSrc && !thumbFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <CardThumbImg
             src={thumbSrc}
             alt={p.title || ''}
-            loading="lazy"
             onError={() => setThumbFailed(true)}
           />
         ) : (

@@ -3,9 +3,12 @@
  * that use them agree and so the branchy "what plays next" decision is testable
  * without a video element.
  *
- * Repeat is deliberately a per-track *setting* rather than a duplicated entry:
- * playlists reject duplicate videos (the manager's pool disables an already
- * added one), so wanting a favourite twice has to be expressed here instead.
+ * Repeat is deliberately a per-track *setting* rather than a duplicated entry.
+ * A playlist may list one video several times only when each occurrence pins a
+ * different `.bx` (a difficulty ladder); an exact repeat of (video, path) is
+ * refused, so playing the identical track twice is expressed here instead. See
+ * `playlistEntries.ts`. That is also why per-track state is keyed by a *track
+ * key* (`trackKeys`), never by the bare video id.
  */
 
 /** Per-track repeat. `once` replays a track a single extra time. */
@@ -104,51 +107,51 @@ export function sequentialOrder(n: number): number[] {
  */
 export function barLoopMode(
   prefs: PlaylistPrefs,
-  currentFolder: string,
+  currentKey: string,
 ): PlaylistLoopMode {
   if (prefs.loop !== 'off') return prefs.loop
-  if (currentFolder && prefs.tracks[currentFolder] === 'forever') return 'one'
+  if (currentKey && prefs.tracks[currentKey] === 'forever') return 'one'
   return 'off'
 }
 
 /** What a sidebar row shows. Repeat-one is a `forever` on the playing row. */
 export function rowLoopMode(
   prefs: PlaylistPrefs,
-  folder: string,
-  currentFolder: string,
+  key: string,
+  currentKey: string,
 ): LoopMode {
-  if (prefs.loop === 'one' && folder === currentFolder) return 'forever'
-  return prefs.tracks[folder] || 'off'
+  if (prefs.loop === 'one' && key === currentKey) return 'forever'
+  return prefs.tracks[key] || 'off'
 }
 
 /** Prefs after pressing the control-bar loop button: off → all → one → off. */
 export function cycleBarLoop(
   prefs: PlaylistPrefs,
-  currentFolder: string,
+  currentKey: string,
 ): PlaylistPrefs {
-  const loop = cyclePlaylistLoopMode(barLoopMode(prefs, currentFolder))
+  const loop = cyclePlaylistLoopMode(barLoopMode(prefs, currentKey))
   const tracks = { ...prefs.tracks }
   // Leaving repeat-one has to release a ∞ pinned on the playing row too, or
   // `barLoopMode` would derive `one` straight back on the next render.
-  if (loop !== 'one' && currentFolder && tracks[currentFolder] === 'forever')
-    delete tracks[currentFolder]
+  if (loop !== 'one' && currentKey && tracks[currentKey] === 'forever')
+    delete tracks[currentKey]
   return { ...prefs, loop, tracks }
 }
 
 /** Prefs after pressing a sidebar row's repeat button: off → once → forever. */
 export function cycleRowLoop(
   prefs: PlaylistPrefs,
-  folder: string,
-  currentFolder: string,
+  key: string,
+  currentKey: string,
 ): PlaylistPrefs {
-  const next = cycleLoopMode(rowLoopMode(prefs, folder, currentFolder))
+  const next = cycleLoopMode(rowLoopMode(prefs, key, currentKey))
   const tracks = { ...prefs.tracks }
-  if (next === 'off') delete tracks[folder]
-  else tracks[folder] = next
+  if (next === 'off') delete tracks[key]
+  else tracks[key] = next
   // Same fact from the other side: taking the playing row off ∞ must clear
   // playlist repeat-one, which is what was rendering that ∞.
   const loop =
-    folder === currentFolder && prefs.loop === 'one' && next !== 'forever'
+    key === currentKey && prefs.loop === 'one' && next !== 'forever'
       ? 'off'
       : prefs.loop
   return { ...prefs, loop, tracks }
@@ -162,7 +165,11 @@ export function cycleRowLoop(
 export type PlaylistPrefs = {
   loop: PlaylistLoopMode
   shuffle: boolean
-  /** Per-track repeat, keyed by video folder id so reordering cannot shift it. */
+  /**
+   * Per-track repeat, keyed by track key (`trackKeys`) so reordering cannot
+   * shift it. That is the bare folder id for a video listed once, so prefs
+   * saved before repeated videos were allowed still apply.
+   */
   tracks: Record<string, LoopMode>
 }
 

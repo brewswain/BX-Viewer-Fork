@@ -45,6 +45,8 @@ const header = (minCmdMs = 100) => ({
   planCommands: 4,
   label: 'bench-card',
   fps: FPS,
+  governorLevel: 'tame',
+  capsHash: 'deadbeef',
 })
 
 const entry = (over: Partial<BenchEntry> = {}): BenchEntry => ({

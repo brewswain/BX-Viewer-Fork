@@ -62,7 +62,14 @@ import {
   toggleShuffle,
   usePlayback,
 } from '@/lib/player/playbackStore'
-import { fetchJSON, fetchText, framesToTimecode, renderDescription } from '@/lib/player/format'
+import {
+  descriptionParagraphs,
+  fetchJSON,
+  fetchText,
+  framesToTimecode,
+  renderDescription,
+} from '@/lib/player/format'
+import { trackKeys } from '@/lib/player/playlistEntries'
 import { poppersCycles } from '@/lib/player/poppers'
 import type {
   BxEffect,
@@ -135,7 +142,24 @@ function defaultBxFile(meta: TrackMeta): string | null {
   )
 }
 
-function descriptionParagraphs(meta: VideoMeta | undefined): string[] {
+/**
+ * Per-track keys for repeat prefs. A playlist may hold one video several times
+ * with different paths, so the folder alone does not name a track. Keyed on the
+ * entry's path, not the user's live dropdown pick, so a pick does not move it.
+ */
+function keysOf(metas: TrackMeta[]): string[] {
+  return trackKeys(metas.map((m) => ({ videoId: m._folder, bxFile: defaultBxFile(m) })))
+}
+
+/** Path label for a row whose video the playlist lists more than once. */
+function repeatLabel(metas: TrackMeta[], i: number): string | null {
+  const m = metas[i]
+  if (metas.filter((o) => o._folder === m._folder).length < 2) return null
+  const file = defaultBxFile(m)
+  return m.bxFiles?.find((b) => b.file === file)?.label || file
+}
+
+function videoParagraphs(meta: VideoMeta | undefined): string[] {
   if (!meta || !meta.description) return []
   return Array.isArray(meta.description) ? meta.description : [meta.description]
 }
@@ -172,7 +196,7 @@ function PlaylistInner() {
   // Loop / shuffle / per-track repeat, plus which track is playing. External so
   // the engine's `onEnded` — built once per playlist — can read it at event time
   // without the page keeping a mirror ref beside a piece of state.
-  const { prefs, order, position, currentIndex, currentFolder } = usePlayback()
+  const { prefs, order, position, currentIndex, currentKey } = usePlayback()
   // The user's variant picks, keyed by track index. Recorded rather than left in
   // the dropdown so a revisited track keeps its pick and the OSSM export sends
   // the paths that were actually played. The ref is what `loadTrack` reads: it
@@ -308,7 +332,7 @@ function PlaylistInner() {
           order: now.order,
           position: now.position,
           loop: now.prefs.loop,
-          trackLoop: now.prefs.tracks[now.currentFolder] || 'off',
+          trackLoop: now.prefs.tracks[now.currentKey] || 'off',
           repeatsUsed: now.repeatsUsed,
         })
         if (result.action === 'stop') {
@@ -316,7 +340,7 @@ function PlaylistInner() {
           // just stops, keeping everything that was in it.
           // Radio refills it from its own effect below.
           if (first.uids) return
-          const ended = metasNow().find((m) => m._folder === now.currentFolder)
+          const ended = metasNow()[now.currentIndex]
           void radioTopUp(ended?.tags).then((uid) => uid && routerRef.current.push(queueHref(uid)))
           return
         }
@@ -351,7 +375,7 @@ function PlaylistInner() {
       const folder = meta._folder
       // Title / authors / description / track counters, the active row, and the
       // loop button's "current track" all re-render from this.
-      setCurrentTrack(index, folder)
+      setCurrentTrack(index, keysOf(metasNow())[index])
       setPlayingMeta(meta)
       const uid = loadedRef.current?.uids?.[index]
       if (uid) setQueueCurrent(uid)
@@ -376,12 +400,12 @@ function PlaylistInner() {
         const bxRaw = await fetchText(
           `${VIDEO_BASE}/${encodeURIComponent(folder)}/${encodeURIComponent(String(bxFileToLoad))}`,
         )
-        const { markerData, effects } = parseBx(JSON.parse(bxRaw))
+        const { markerData, effects, governor } = parseBx(JSON.parse(bxRaw))
         newPath = buildPath(markerData, newTotalFrames)
         newEffects = effects
         await loadEffectFonts(effects, folder)
         newPeaks = peaksFromMarkerData(markerData)
-        deviceManager.setMarkers(markersFromData(markerData))
+        deviceManager.setMarkers(markersFromData(markerData), governor)
       } catch (e) {
         console.warn('Could not load bx file:', e)
         newPath = new Float32Array(newTotalFrames).fill(0)
@@ -473,7 +497,10 @@ function PlaylistInner() {
       if (cancelled) return
       const next: Loaded = {
         ...cur,
-        playlist: { ...cur.playlist, videos: queue.items.map((i) => i.folder) },
+        playlist: {
+          ...cur.playlist,
+          videos: queue.items.map((i) => (i.bxFile ? { id: i.folder, bxFile: i.bxFile } : i.folder)),
+        },
         metas,
         uids: nextUids,
       }
@@ -529,9 +556,9 @@ function PlaylistInner() {
    */
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !currentFolder) return
-    video.loop = rowLoopMode(prefs, currentFolder, currentFolder) === 'forever'
-  }, [prefs, currentFolder])
+    if (!video || !currentKey) return
+    video.loop = rowLoopMode(prefs, currentKey, currentKey) === 'forever'
+  }, [prefs, currentKey])
 
   /** Prev/next follow play order, and wrap only when repeat-all is on. */
   function stepTrack(delta: number) {
@@ -560,7 +587,7 @@ function PlaylistInner() {
       const rawSel = await fetchText(
         `${VIDEO_BASE}/${encodeURIComponent(state.folder)}/${encodeURIComponent(b.file)}`,
       )
-      const { markerData, effects } = parseBx(JSON.parse(rawSel))
+      const { markerData, effects, governor } = parseBx(JSON.parse(rawSel))
       const peaksSel = peaksFromMarkerData(markerData)
       engineRef.current?.loadBxData(
         buildPath(markerData, frames),
@@ -568,7 +595,7 @@ function PlaylistInner() {
         effects,
         peaksSel,
       )
-      deviceManager.setMarkers(markersFromData(markerData))
+      deviceManager.setMarkers(markersFromData(markerData), governor)
     } catch (err) {
       console.warn('Could not load bx file:', err)
     }
@@ -644,6 +671,8 @@ function PlaylistInner() {
 
   const { id, playlist, metas } = loaded
   const current = playingMeta ?? metas[0]
+  const keys = keysOf(metas)
+  const aboutParagraphs = descriptionParagraphs(playlist.description)
 
   // The sidebar is the answer to "what plays next", so it lists tracks in play
   // order rather than playlist order — shuffling reorders the rows, and turning
@@ -694,7 +723,7 @@ function PlaylistInner() {
               hasPrevNext
               hasFlipY
               hasPlaylistDrawer
-              loopMode={barLoopMode(prefs, currentFolder)}
+              loopMode={barLoopMode(prefs, currentKey)}
               onCycleLoop={cycleLoop}
               shuffle={isQueue ? null : prefs.shuffle}
               onToggleShuffle={() => toggleShuffle(metas.length)}
@@ -747,6 +776,23 @@ function PlaylistInner() {
                 </span>
               </div>
             </div>
+            {/* Above the track's own description: a playlist's notes override its
+                members' (which bottle per video, which cards to skip), so they
+                open expanded and stay put while tracks change underneath. */}
+            {aboutParagraphs.length > 0 && (
+              <details className="playlist-about" key={id} open>
+                <summary className="playlist-about-summary">About this playlist</summary>
+                <div className="playlist-about-body">
+                  {aboutParagraphs.map((p, i) => (
+                    <p
+                      className="video-description"
+                      key={i}
+                      dangerouslySetInnerHTML={{ __html: renderDescription(p) }}
+                    />
+                  ))}
+                </div>
+              </details>
+            )}
             {/* The playlist page carries no tags of its own, so this row exists
                 only when the track that is playing deals breath. */}
             {popCycles > 0 && (
@@ -763,7 +809,7 @@ function PlaylistInner() {
               </div>
             )}
             <div id="videoDescContainer">
-              {descriptionParagraphs(current).map((p, i) => (
+              {videoParagraphs(current).map((p, i) => (
                 <p
                   className="video-description"
                   key={i}
@@ -771,11 +817,6 @@ function PlaylistInner() {
                 />
               ))}
             </div>
-            {playlist.description ? (
-              <p className="video-description" style={{ marginTop: '1rem' }}>
-                <strong>Playlist Description:</strong> {playlist.description}
-              </p>
-            ) : null}
           </div>
         </div>
 
@@ -819,6 +860,7 @@ function PlaylistInner() {
                   m.durationSecs != null
                     ? framesToTimecode(Math.round(m.durationSecs * 60))
                     : framesToTimecode(m.duration || 0)
+                const pathLabel = repeatLabel(metas, i)
                 return (
                   <div
                     className={
@@ -851,12 +893,13 @@ function PlaylistInner() {
                       <div className="ptrack-title">{m.title || folder}</div>
                       <div className="ptrack-author">
                         {m.pathCreator || 'Unknown'}
+                        {pathLabel ? ` · ${pathLabel}` : ''}
                       </div>
                     </div>
                     <div className="ptrack-duration">{timecode}</div>
                     <TrackRepeatButton
-                      mode={rowLoopMode(prefs, folder, currentFolder)}
-                      onCycle={() => cycleTrackRepeat(folder)}
+                      mode={rowLoopMode(prefs, keys[i], currentKey)}
+                      onCycle={() => cycleTrackRepeat(keys[i])}
                     />
                   </div>
                 )
@@ -883,8 +926,8 @@ const TRACK_REPEAT_UI: Record<LoopMode, { title: string; badge: string | null }>
 }
 
 /**
- * Per-track repeat, the alternative to listing a favourite twice — playlists
- * reject duplicates, so wanting a video again has to be a setting on the row.
+ * Per-track repeat, the way to play the identical track twice: a playlist may
+ * repeat a video only with a different path, never the same (video, path).
  */
 function TrackRepeatButton({
   mode,

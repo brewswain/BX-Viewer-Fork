@@ -48,10 +48,18 @@ export type BxEffect = {
  */
 export type RawBx = {
   version?: number
-  meta?: { version?: number }
+  meta?: { version?: number; governorLevel?: string; capsHash?: string }
   markers?: MarkerData
   effects?: BxEffect[]
 }
+
+/**
+ * The firmware governor level and caps hash a bench `.bx` was generated
+ * against (BX-Studio `scripts/bench_edgecase_path.py`). Carried into the bench
+ * recorder's header so the viewer log, the firmware log and the run sheet can be
+ * checked against one hash. `'unknown'` on any path that does not stamp them.
+ */
+export type BxGovernor = { governorLevel: string; capsHash: string }
 
 export type BxFileRef = {
   label?: string
@@ -88,7 +96,8 @@ export type PlaylistEntry = string | { id?: string; videoId?: string; bxFile?: s
 
 export type PlaylistMeta = {
   title?: string
-  description?: string
+  /** The manager saves a multi-line description as an array of lines. */
+  description?: string | string[]
   videos?: PlaylistEntry[]
 }
 
@@ -100,6 +109,7 @@ export type BxSource = {
   effects: BxEffect[]
   peaks: number[]
   path?: Float32Array
+  governor?: BxGovernor
 }
 
 export type Rgb = [number, number, number]

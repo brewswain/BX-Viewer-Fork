@@ -84,6 +84,13 @@ export type BenchHeader = {
   /** Whatever the page knows about what is playing. Free-form on purpose. */
   label: string
   fps: number
+  /**
+   * The governor level and caps hash the loaded `.bx` was generated against,
+   * from its `meta`. The grader refuses a run whose viewer, firmware and run
+   * sheet hashes disagree. `'unknown'` when the `.bx` does not carry them.
+   */
+  governorLevel: string
+  capsHash: string
 }
 
 /**
@@ -149,6 +156,7 @@ export class BenchRecorder {
     if (h) {
       lines.push(`# startedAt=${h.startedAt}`)
       lines.push(`# minCmdMs=${h.minCmdMs}  leadMs=${h.leadMs}  offsetMs=${h.offsetMs}`)
+      lines.push(`# governorLevel=${h.governorLevel}  capsHash=${h.capsHash}`)
       lines.push(`# rangeMin=${h.rangeMin}  rangeMax=${h.rangeMax}  invert=${h.invert}`)
       lines.push(`# backend=${h.backend}  planCommands=${h.planCommands}  fps=${h.fps}`)
       lines.push(`# label=${h.label}`)

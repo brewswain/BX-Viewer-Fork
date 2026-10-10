@@ -66,7 +66,7 @@ export default function QueuePanel({ onPlay, isPlayer = false }: Props) {
     try {
       const id = await saveQueueAsPlaylist(
         title,
-        items.map((i) => i.folder),
+        items.map((i) => ({ folder: i.folder, bxFile: i.bxFile })),
       )
       setSave({ state: 'saved', id, title })
     } catch (e) {

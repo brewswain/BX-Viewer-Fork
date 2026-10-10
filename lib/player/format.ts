@@ -55,11 +55,29 @@ export function renderDescription(text: unknown): string {
     // only ever knew about links, so the asterisks reached the screen as asterisks.
     // Safe after escHtml, which has already neutralised any markup in the source.
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    // Playlist descriptions name members by `slug`; real newlines are the
+    // single breaks left inside a paragraph by descriptionParagraphs.
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\r?\n/g, '<br>')
     .replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
       (_m: string, label: string, url: string) =>
         `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;">${label}</a>`,
     )
+}
+
+/**
+ * A meta.json `description` as paragraphs for renderDescription. It may be one
+ * string with blank-line paragraphs, or the manager's array of lines (blank
+ * entries included), so both are joined and split on blank lines.
+ */
+export function descriptionParagraphs(desc: string | string[] | undefined | null): string[] {
+  if (!desc) return []
+  const text = Array.isArray(desc) ? desc.join('\n') : String(desc)
+  return text
+    .split(/\r?\n\s*\r?\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
 }
 
 export async function fetchJSON<T = unknown>(url: string): Promise<T> {

@@ -13,6 +13,11 @@ import {
   type PlaylistMeta,
   type VideoMeta,
 } from '@/lib/manager-client'
+import {
+  describeDuplicates,
+  findDuplicateEntries,
+  nextUnusedBx,
+} from '@/lib/player/playlistEntries'
 import PkgDropZone, {
   clearZone,
   emptyZone,
@@ -303,14 +308,23 @@ export default function CreatePlaylistOverlay({
     const descRaw = description.trim()
     const descLines = descRaw ? descRaw.split('\n').map((l) => l.trimEnd()) : []
     const authorValue = author.trim()
+    const dups = findDuplicateEntries(
+      selected.map((v) => ({ id: v.id, bxFile: v.selectedBx })),
+    )
+    if (dups.length) {
+      setError(describeDuplicates(dups))
+      return
+    }
+    const occurrences = (id: string) => selected.filter((s) => s.id === id).length
     const meta: Record<string, unknown> = {
       title: titleValue,
       videos: selected.map((v) => {
         const defaultBx = v.bxFiles[0] ? v.bxFiles[0].file : null
-        if (v.bxFiles.length > 1 && v.selectedBx && v.selectedBx !== defaultBx) {
-          return { id: v.id, bxFile: v.selectedBx }
-        }
-        return v.id
+        // A repeated video pins every occurrence, so each entry says which path
+        // it is without anyone having to know the video's default.
+        const pin =
+          v.selectedBx && (occurrences(v.id) > 1 || (v.bxFiles.length > 1 && v.selectedBx !== defaultBx))
+        return pin ? { id: v.id, bxFile: v.selectedBx } : v.id
       }),
     }
     if (authorValue) meta.author = authorValue
@@ -368,7 +382,24 @@ export default function CreatePlaylistOverlay({
   // ── Derived pool ──────────────────────────────────────────────────────────
 
   const search = videoSearch.toLowerCase()
-  const selectedIds = new Set(selected.map((v) => v.id))
+  /** Paths each video's entries already use; a video may repeat only on a new one. */
+  const usedBx = new Map<string, string[]>()
+  for (const v of selected) {
+    const used = usedBx.get(v.id) ?? []
+    used.push(v.selectedBx ?? '')
+    usedBx.set(v.id, used)
+  }
+  /** The path a click on the pool adds, or null when the video has none left. */
+  function poolPick(v: VideoMeta): { file: string | null; label?: string } | null {
+    const files = bxFilesOf(v)
+    const used = usedBx.get(v._folder)
+    if (!used) return { file: files[0] ? files[0].file : null }
+    const next = nextUnusedBx(
+      files.map((b) => b.file),
+      used,
+    )
+    return next ? { file: next, label: files.find((b) => b.file === next)?.label } : null
+  }
   const filteredPool = allVideos.filter(
     (v) => !search || (v.title || v._folder).toLowerCase().includes(search),
   )
@@ -661,7 +692,10 @@ export default function CreatePlaylistOverlay({
                   <div className="pl-selected-empty">No videos found</div>
                 ) : (
                   filteredPool.map((v) => {
-                    const isAdded = selectedIds.has(v._folder)
+                    const pick = poolPick(v)
+                    const isAdded = pick === null
+                    // Already in, but with a path to spare: adding again is a ladder rung.
+                    const again = !isAdded && usedBx.has(v._folder)
                     const thumbUrl = v.thumbnail
                       ? mediaUrl('videos', v._folder, v.thumbnail)
                       : null
@@ -670,17 +704,14 @@ export default function CreatePlaylistOverlay({
                         key={v._folder}
                         className={'pl-pool-item' + (isAdded ? ' added' : '')}
                         data-id={v._folder}
-                        onClick={
+                        title={
                           isAdded
-                            ? undefined
-                            : () => {
-                                const bxFiles = bxFilesOf(v)
-                                addToSelected(
-                                  v,
-                                  bxFiles[0] ? bxFiles[0].file : null,
-                                )
-                              }
+                            ? 'Every path of this video is already in the playlist'
+                            : again
+                              ? `Add again with ${pick.label || pick.file}`
+                              : undefined
                         }
+                        onClick={isAdded ? undefined : () => addToSelected(v, pick.file)}
                       >
                         <div className="pl-pool-thumb">
                           {thumbUrl ? (
@@ -696,7 +727,9 @@ export default function CreatePlaylistOverlay({
                         <span className="pl-pool-title">
                           {v.title || v._folder}
                         </span>
-                        <span className="pl-pool-sub">{v.pathCreator || ''}</span>
+                        <span className="pl-pool-sub">
+                          {again ? `+ ${pick.label || pick.file}` : v.pathCreator || ''}
+                        </span>
                       </div>
                     )
                   })
@@ -799,11 +832,19 @@ export default function CreatePlaylistOverlay({
                             value={v.selectedBx ?? ''}
                             onChange={(e) => changeBx(i, e.target.value)}
                           >
-                            {v.bxFiles.map((b) => (
-                              <option key={b.file} value={b.file}>
-                                {b.label}
-                              </option>
-                            ))}
+                            {v.bxFiles.map((b) => {
+                              // Another entry of this video holds it: picking
+                              // it would make an exact repeat.
+                              const taken = selected.some(
+                                (o, j) => j !== i && o.id === v.id && o.selectedBx === b.file,
+                              )
+                              return (
+                                <option key={b.file} value={b.file} disabled={taken}>
+                                  {b.label}
+                                  {taken ? ' (in use)' : ''}
+                                </option>
+                              )
+                            })}
                           </select>
                         </div>
                       ) : null}

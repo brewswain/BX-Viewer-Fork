@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import CardThumbImg from '@/components/browse/CardThumbImg'
 import { isPlainClick, usePlay } from '@/components/queue/PlayGate'
 import QueueMenu from '@/components/queue/QueueMenu'
 import { LEVELS, levelRange } from '@/lib/queue/radio'
@@ -196,11 +197,9 @@ export default function VideoCard({ video, index }: { video: VideoMeta; index: n
     >
       <div className="card-thumb">
         {thumbSrc && !thumbFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <CardThumbImg
             src={thumbSrc}
             alt={video.title || ''}
-            loading="lazy"
             onError={() => setThumbFailed(true)}
           />
         ) : (
