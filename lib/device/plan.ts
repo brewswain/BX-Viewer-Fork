@@ -49,6 +49,8 @@ export type StrokeCmd = {
   pos: number
   /** Travel time in ms. */
   dur: number
+  /** Raw moves folded into this one by the `minCmdMs` pass (bench log only). */
+  merged?: number
 }
 
 export type LinearizeOptions = {
@@ -221,6 +223,16 @@ function stepsFor(seg: Segment, opts: LinearizeOptions): number {
  * storm no transport survives. Merging keeps the *last* position of the merged
  * run, so stroke endpoints — the part you actually feel — are preserved and
  * only the intermediate detail is dropped.
+ *
+ * Except at a turning point. Keeping the last position of a run that reverses
+ * inside the window throws the peak away: a one-frame snap followed by its
+ * return collapsed to the return target, and the 2026-10-10 bench sent a
+ * constant 0 through every snap run. So a reversal emits the peak and delays
+ * the return to the floor, as long as the return still has time to land on
+ * schedule; when it does not (cycles shorter than two floors), the peak is
+ * kept and the return target dropped, so the stroke halves in rate rather than
+ * vanishing. The return is only ever delayed within its own span, so no lag
+ * accumulates.
  */
 export function linearize(
   segments: Segment[],
@@ -248,23 +260,43 @@ export function linearize(
 
   const out: StrokeCmd[] = []
   let pending: StrokeCmd | null = null
+  // Where the device is when `pending` starts: the last emitted target.
+  let base = segments[0].from
+  const emit = (c: StrokeCmd) => {
+    out.push(c)
+    base = c.pos
+  }
   for (const cmd of raw) {
     if (!pending) {
-      pending = { ...cmd }
+      pending = { ...cmd, merged: 0 }
       continue
     }
     // `cmd.t - pending.t` rather than summing durations: gaps between segments
     // are real time the device spends holding still, and count toward the floor.
     const span = cmd.t - pending.t
-    if (span < opts.minCmdMs) {
-      // Absorb: keep the run's start time, adopt the newest target.
-      pending.pos = cmd.pos
-      pending.dur = cmd.t + cmd.dur - pending.t
+    if (span >= opts.minCmdMs) {
+      pending.dur = Math.min(pending.dur, span)
+      emit(pending)
+      pending = { ...cmd, merged: 0 }
       continue
     }
-    pending.dur = Math.min(pending.dur, span)
-    out.push(pending)
-    pending = { ...cmd }
+    const dir = Math.sign(pending.pos - base)
+    if (dir !== 0 && Math.sign(cmd.pos - pending.pos) === -dir) {
+      const end: number = cmd.t + cmd.dur
+      const backT: number = pending.t + opts.minCmdMs
+      if (backT < end) {
+        pending.dur = Math.min(pending.dur, opts.minCmdMs)
+        emit(pending)
+        pending = { t: backT, pos: cmd.pos, dur: end - backT, merged: 0 }
+      } else {
+        pending.merged = (pending.merged ?? 0) + 1
+      }
+      continue
+    }
+    // Absorb: keep the run's start time, adopt the newest target.
+    pending.pos = cmd.pos
+    pending.dur = cmd.t + cmd.dur - pending.t
+    pending.merged = (pending.merged ?? 0) + 1
   }
   if (pending) out.push(pending)
 

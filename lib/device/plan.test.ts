@@ -184,6 +184,54 @@ describe('linearize', () => {
     expect(worst).toBeLessThan(DEFAULT_LINEARIZE.tolerance * 2)
   })
 
+  // The bench card's snap shapes: a one-frame attack, then an eased return.
+  // On 2026-10-10 the merge kept only the return target, so every snap run
+  // went out as a constant 0.
+  const snaps = (cycles: number, period: number) => {
+    const markers: Marker[] = []
+    for (let i = 0; i < cycles; i++) {
+      markers.push(m(i * period, 0, 4, 2), m(i * period + 1, 1, 0, 0))
+    }
+    markers.push(m(cycles * period, 0, 4, 2))
+    return buildSegments(markers)
+  }
+  const peaks = (cmds: StrokeCmd[]) => cmds.filter((c) => c.pos > 0.99).length
+
+  test('keeps every one-frame snap peak when the floor allows it (minCmdMs 20)', () => {
+    const cmds = linearize(snaps(20, 10), { ...DEFAULT_LINEARIZE, minCmdMs: 20 })
+    expect(peaks(cmds)).toBe(20)
+    for (let i = 1; i < cmds.length; i++) {
+      expect(cmds[i].t - cmds[i - 1].t).toBeGreaterThanOrEqual(20 - 1e-6)
+      expect(cmds[i - 1].t + cmds[i - 1].dur).toBeLessThanOrEqual(cmds[i].t + 1e-6)
+    }
+  })
+
+  test('keeps the snap peak at the default floor when the return has room (Whiplash)', () => {
+    // 1 frame down, 14 back: 250 ms cycles against a 100 ms floor.
+    const cmds = linearize(snaps(20, 15))
+    expect(peaks(cmds)).toBe(20)
+    expect(cmds.some((c) => c.pos < 0.01)).toBe(true)
+  })
+
+  test('cycles shorter than two floors halve in rate instead of vanishing', () => {
+    // 360 cpm (10 frames) at 100 ms: both turnarounds cannot fit every cycle.
+    const cmds = linearize(snaps(20, 10))
+    expect(peaks(cmds)).toBeGreaterThanOrEqual(9)
+    expect(cmds.some((c) => c.pos < 0.01)).toBe(true)
+    for (let i = 1; i < cmds.length; i++) {
+      expect(cmds[i].t - cmds[i - 1].t).toBeGreaterThanOrEqual(100 - 1e-6)
+    }
+    // No lag builds up: the plan still ends where the path does.
+    expect(cmds.at(-1)!.t).toBeLessThanOrEqual(ms(200))
+  })
+
+  test('counts merged moves so the bench log can show them', () => {
+    const markers: Marker[] = []
+    for (let i = 0; i < 60; i++) markers.push(m(i * 2, i / 60))
+    const cmds = linearize(buildSegments(markers))
+    expect(cmds.reduce((n, c) => n + (c.merged ?? 0), 0)).toBeGreaterThan(0)
+  })
+
   test('empty input yields no commands', () => {
     expect(linearize([])).toEqual([])
   })

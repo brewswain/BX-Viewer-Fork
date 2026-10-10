@@ -393,7 +393,7 @@ export class StrokeDriver {
         videoMs,
         cmdMs: cmd.t,
         kind: 'cmd',
-        merged,
+        merged: merged + (cmd.merged ?? 0),
         lateMs: late,
       })
     }
