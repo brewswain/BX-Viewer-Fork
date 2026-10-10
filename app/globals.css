@@ -6730,3 +6730,99 @@ body:has(.manager-layout) {
     opacity: 1;
   }
 }
+
+/* ── Bench HUD ──────────────────────────────────────────────────────────────
+   The driver's counters over the picture during a machine bench run. Sized and
+   coloured to survive being read off a phone video of a monitor, which is the
+   only way anyone will ever read it: opaque black rather than a blur, a hard
+   white on it, monospace with tabular figures so a changing number does not
+   shift the column, and no transition anywhere, because a value mid-fade is a
+   value a still cannot be trusted on. */
+.bench-hud {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 9000;
+  background: #000;
+  border: 2px solid #fff;
+  color: #fff;
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+  line-height: 1.35;
+  padding: 0.5rem 0.7rem;
+  min-width: 15rem;
+  user-select: none;
+}
+
+.bench-hud-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid #fff;
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.bench-hud-min {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.bench-hud-x {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  cursor: pointer;
+}
+
+.bench-hud-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.9rem;
+}
+
+.bench-hud-grid b {
+  text-align: right;
+  font-weight: 700;
+}
+
+.bench-hud-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.bench-hud-btn {
+  flex: 1;
+  background: #000;
+  border: 1px solid #fff;
+  color: #fff;
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+}
+
+.bench-hud-btn:hover {
+  background: #fff;
+  color: #000;
+}
+
+/* Recording is the one state that must be unmistakable in a still, so it is
+   filled rather than outlined. */
+.bench-hud-rec {
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+}
+
+.bench-hud-saved {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  word-break: break-all;
+}

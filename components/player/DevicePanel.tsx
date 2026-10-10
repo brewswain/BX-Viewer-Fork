@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { deviceManager } from '@/lib/device/manager'
 import { useDeviceState } from '@/lib/device/useDevice'
+import BenchHud from './BenchHud'
 
 /**
  * Connection status and manual connect/disconnect for the player sidebar.
@@ -24,6 +25,10 @@ export default function DevicePanel() {
   const state = useDeviceState()
   const [busy, setBusy] = useState(false)
   const [showLog, setShowLog] = useState(false)
+  // The bench HUD is an overlay over the picture rather than a sidebar section,
+  // because the camera is aimed at the picture. It is mounted from here only so
+  // that there is one obvious place to turn it on; nothing else renders it.
+  const [showHud, setShowHud] = useState(false)
 
   const { connection, config, devices, armed, planCommands, detail } = state
   const connected = connection === 'connected'
@@ -114,6 +119,16 @@ export default function DevicePanel() {
       {planCommands > 0 && (
         <div className="device-meta">{planCommands.toLocaleString()} moves planned</div>
       )}
+
+      <button
+        type="button"
+        className="device-log-toggle"
+        onClick={() => setShowHud((v) => !v)}
+      >
+        {showHud ? 'Hide' : 'Show'} bench HUD
+        {state.recording ? ` (recording ${deviceManager.benchCount()})` : ''}
+      </button>
+      {showHud && <BenchHud onClose={() => setShowHud(false)} />}
 
       <button
         type="button"
