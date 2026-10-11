@@ -83,7 +83,9 @@ export type Settings = {
   deviceFitEnabled: boolean
   deviceFitMaxSpeed: number
   deviceFitMaxAccel: number
-  deviceFitTravelSteps: number
+  /** The Sauce app's range sliders, percent of the homed range. */
+  deviceFitSauceMinPct: number
+  deviceFitSauceMaxPct: number
   /**
    * Base URL of the OSSM Sauce app for the *export* route (`lib/ossm/app.ts`).
    * Empty means "guess from this page's hostname, port 8081", which is right
@@ -147,7 +149,8 @@ export const DEFAULTS: Settings = {
   deviceFitEnabled: true,
   deviceFitMaxSpeed: 20000,
   deviceFitMaxAccel: 500000,
-  deviceFitTravelSteps: 5800,
+  deviceFitSauceMinPct: 0,
+  deviceFitSauceMaxPct: 100,
   ossmAppUrl: '',
   // The T&S-style BX Studio videos are the best synthesized ones so far.
   browseDefaultTags: ['thingsnstuff style'],
@@ -176,6 +179,25 @@ export function resetSettings(): Settings {
   return { ...DEFAULTS }
 }
 
+/**
+ * The Sauce range as saved: each in 0..100 at 0.1 resolution, min below max.
+ * Swapped if entered backwards; an empty range is widened to 0.1 rather than
+ * rejected, since a zero travel would turn the fit off without saying so.
+ */
+export function clampSauceRange(
+  minPct: number,
+  maxPct: number,
+): Pick<Settings, 'deviceFitSauceMinPct' | 'deviceFitSauceMaxPct'> {
+  const c = (v: number) => Math.round(Math.min(100, Math.max(0, v)) * 10) / 10
+  let lo = Math.min(c(minPct), c(maxPct))
+  let hi = Math.max(c(minPct), c(maxPct))
+  if (hi === lo) {
+    hi = Math.min(100, lo + 0.1)
+    lo = Math.round((hi - 0.1) * 10) / 10
+  }
+  return { deviceFitSauceMinPct: lo, deviceFitSauceMaxPct: hi }
+}
+
 /** The device-relevant subset, in the shape `deviceManager.configure` wants. */
 export function deviceConfigFromSettings(s: Settings) {
   return {
@@ -193,6 +215,7 @@ export function deviceConfigFromSettings(s: Settings) {
     fitEnabled: s.deviceFitEnabled,
     fitMaxSpeed: s.deviceFitMaxSpeed,
     fitMaxAccel: s.deviceFitMaxAccel,
-    fitTravelSteps: s.deviceFitTravelSteps,
+    fitSauceMinPct: s.deviceFitSauceMinPct,
+    fitSauceMaxPct: s.deviceFitSauceMaxPct,
   }
 }

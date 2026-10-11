@@ -19,6 +19,8 @@ import {
   fitToMachine,
   linearize,
   minMoveMs,
+  SAUCE_HOMED_STEPS,
+  sauceTravelSteps,
   seekIndex,
   type StrokeCmd,
 } from './plan'
@@ -293,6 +295,21 @@ const zigzag = (n: number, period: number, lo = 0, hi = 1): StrokeCmd[] =>
 const arrival = (c: StrokeCmd) => c.t + c.dur
 
 describe('fitToMachine', () => {
+  test('sauceTravelSteps: the Sauce app range as a share of the homed steps', () => {
+    expect(sauceTravelSteps(0, 100)).toBe(SAUCE_HOMED_STEPS)
+    expect(sauceTravelSteps(0, 58.3)).toBeCloseTo(3381.4, 6)
+    expect(sauceTravelSteps(-10, 150)).toBe(SAUCE_HOMED_STEPS)
+    expect(sauceTravelSteps(60, 40)).toBe(0)
+  })
+
+  test('a narrower Sauce range makes the same script reachable', () => {
+    // A full stroke needs 330 ms at 0..100%; at 0..20% it is 1160 steps, 98 ms.
+    const cmds = zigzag(20, 120)
+    expect(fitToMachine(cmds, 0, DEFAULT_FIT).length).toBeLessThan(cmds.length)
+    const narrow = { ...DEFAULT_FIT, travelSteps: sauceTravelSteps(0, 20) }
+    expect(fitToMachine(cmds, 0, narrow)).toEqual(cmds)
+  })
+
   test('minMoveMs: triangle under the speed cap, trapezoid over it', () => {
     // 800 steps reaches 20000 steps/s exactly at 500000 steps/s2.
     expect(minMoveMs(800, 20000, 500000)).toBeCloseTo(80, 6)

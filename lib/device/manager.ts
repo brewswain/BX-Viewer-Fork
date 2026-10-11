@@ -13,7 +13,13 @@
  * when something a human would notice actually changes.
  */
 
-import { buildStrokePlan, DEFAULT_FIT, DEFAULT_LINEARIZE, type FitOptions } from './plan'
+import {
+  buildStrokePlan,
+  DEFAULT_FIT,
+  DEFAULT_LINEARIZE,
+  type FitOptions,
+  sauceTravelSteps,
+} from './plan'
 import { EMPTY_PLAN, StrokeDriver, type StrokePlan } from './driver'
 import { BenchRecorder } from './bench'
 import { FPS } from '@/lib/player/constants'
@@ -58,12 +64,23 @@ export type DeviceConfig = {
   fitMaxSpeed: number
   /** Steps/s², the accel the Sauce app is set to. */
   fitMaxAccel: number
-  /** Steps the machine's homed range spans; the stroke range is applied on top. */
-  fitTravelSteps: number
+  /**
+   * The Sauce app's own min/max range sliders, in percent of the homed range
+   * (`SAUCE_HOMED_STEPS`). The viewer's stroke range is applied on top.
+   */
+  fitSauceMinPct: number
+  fitSauceMaxPct: number
 }
 
 /** Config keys that change the plan rather than just the next command. */
-const PLAN_KEYS = ['minCmdMs', 'fitEnabled', 'fitMaxSpeed', 'fitMaxAccel', 'fitTravelSteps'] as const
+const PLAN_KEYS = [
+  'minCmdMs',
+  'fitEnabled',
+  'fitMaxSpeed',
+  'fitMaxAccel',
+  'fitSauceMinPct',
+  'fitSauceMaxPct',
+] as const
 
 /** The fit the plan is built with, or undefined when fitting is off. */
 export function fitFor(c: DeviceConfig): FitOptions | undefined {
@@ -71,7 +88,8 @@ export function fitFor(c: DeviceConfig): FitOptions | undefined {
   return {
     maxSpeed: c.fitMaxSpeed,
     maxAccel: c.fitMaxAccel,
-    travelSteps: c.fitTravelSteps * Math.abs(c.rangeMax - c.rangeMin),
+    travelSteps:
+      sauceTravelSteps(c.fitSauceMinPct, c.fitSauceMaxPct) * Math.abs(c.rangeMax - c.rangeMin),
   }
 }
 
@@ -90,7 +108,8 @@ export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
   fitEnabled: true,
   fitMaxSpeed: DEFAULT_FIT.maxSpeed,
   fitMaxAccel: DEFAULT_FIT.maxAccel,
-  fitTravelSteps: DEFAULT_FIT.travelSteps,
+  fitSauceMinPct: 0,
+  fitSauceMaxPct: 100,
 }
 
 /**
@@ -393,7 +412,9 @@ class DeviceManager {
       fps: FPS,
       governorLevel: this.governor.governorLevel,
       capsHash: this.governor.capsHash,
-      fit: fitFor(c) ?? null,
+      fit: c.fitEnabled
+        ? { ...fitFor(c)!, sauceMinPct: c.fitSauceMinPct, sauceMaxPct: c.fitSauceMaxPct }
+        : null,
     })
     this.driver.setRecorder(this.recorder)
     this.addLog(`Bench recording armed at minCmdMs=${c.minCmdMs}`)

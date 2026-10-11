@@ -47,7 +47,7 @@ const header = (minCmdMs = 100) => ({
   fps: FPS,
   governorLevel: 'tame',
   capsHash: 'deadbeef',
-  fit: { maxSpeed: 20000, maxAccel: 500000, travelSteps: 5800 },
+  fit: { maxSpeed: 20113, maxAccel: 500000, travelSteps: 3381.4, sauceMinPct: 0, sauceMaxPct: 58.3 },
 })
 
 const entry = (over: Partial<BenchEntry> = {}): BenchEntry => ({
@@ -95,6 +95,16 @@ describe('BenchRecorder', () => {
     const csv = r.toCsv()
     expect(csv).toContain('minCmdMs=20')
     expect(csv).toContain('frame,videoMs,cmdMs,pos,dur,kind,merged,lateMs,seek')
+  })
+
+  test('the CSV header records the fit: caps, Sauce range and derived travel', () => {
+    const r = new BenchRecorder()
+    r.arm(header())
+    expect(r.toCsv()).toContain(
+      '# fit=on  maxSpeed=20113  maxAccel=500000  sauceMinPct=0  sauceMaxPct=58.3  travelSteps=3381',
+    )
+    r.arm({ ...header(), fit: null })
+    expect(r.toCsv()).toContain('# fit=off')
   })
 
   test('an unarmed log says so instead of looking like a run at the default', () => {

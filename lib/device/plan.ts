@@ -315,11 +315,23 @@ export type FitOptions = {
   travelSteps: number
 }
 
+/**
+ * Steps OSSM Sauce's homed range spans (homing's TOTAL RANGE on the bench unit,
+ * 2026-10-10). The Sauce app's min/max range sliders are percents of this.
+ */
+export const SAUCE_HOMED_STEPS = 5800
+
+/** Steps a Sauce app range of `minPct`..`maxPct` covers, each clamped to 0..100. */
+export function sauceTravelSteps(minPct: number, maxPct: number): number {
+  const lo = Math.min(100, Math.max(0, minPct))
+  const hi = Math.min(100, Math.max(0, maxPct))
+  return (SAUCE_HOMED_STEPS * Math.max(0, hi - lo)) / 100
+}
+
 export const DEFAULT_FIT: FitOptions = {
   maxSpeed: 20000,
   maxAccel: 500000,
-  // OSSM Sauce's homed range on the bench unit (2026-10-10).
-  travelSteps: 5800,
+  travelSteps: SAUCE_HOMED_STEPS,
 }
 
 /**

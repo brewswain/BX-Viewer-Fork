@@ -19,6 +19,7 @@ import {
 } from '@/lib/player/theaterFit'
 import {
   DEFAULTS,
+  clampSauceRange,
   deviceConfigFromSettings,
   getSettings,
   resetSettings,
@@ -72,7 +73,8 @@ type FormState = {
   deviceFitEnabled: boolean
   deviceFitMaxSpeed: string
   deviceFitMaxAccel: string
-  deviceFitTravelSteps: string
+  deviceFitSauceMinPct: string
+  deviceFitSauceMaxPct: string
   browseDefaultTags: string[]
   browseDefaultMode: MatchMode
 }
@@ -133,7 +135,8 @@ function toForm(s: Settings): FormState {
     deviceFitEnabled: s.deviceFitEnabled !== false,
     deviceFitMaxSpeed: String(s.deviceFitMaxSpeed),
     deviceFitMaxAccel: String(s.deviceFitMaxAccel),
-    deviceFitTravelSteps: String(s.deviceFitTravelSteps),
+    deviceFitSauceMinPct: String(s.deviceFitSauceMinPct),
+    deviceFitSauceMaxPct: String(s.deviceFitSauceMaxPct),
     browseDefaultTags: Array.isArray(s.browseDefaultTags) ? s.browseDefaultTags : [],
     browseDefaultMode: isMatchMode(s.browseDefaultMode) ? s.browseDefaultMode : 'or',
   }
@@ -209,11 +212,17 @@ export default function SettingsPage() {
       deviceOffsetMs: num(form.deviceOffsetMs, 0),
       deviceMinCmdMs: Math.max(20, num(form.deviceMinCmdMs, DEFAULTS.deviceMinCmdMs)),
       deviceFitEnabled: form.deviceFitEnabled,
-      deviceFitMaxSpeed: Math.max(1, num(form.deviceFitMaxSpeed, DEFAULTS.deviceFitMaxSpeed)),
-      deviceFitMaxAccel: Math.max(1, num(form.deviceFitMaxAccel, DEFAULTS.deviceFitMaxAccel)),
-      deviceFitTravelSteps: Math.max(
+      deviceFitMaxSpeed: Math.max(
         1,
-        num(form.deviceFitTravelSteps, DEFAULTS.deviceFitTravelSteps),
+        Math.floor(num(form.deviceFitMaxSpeed, DEFAULTS.deviceFitMaxSpeed)),
+      ),
+      deviceFitMaxAccel: Math.max(
+        1,
+        Math.floor(num(form.deviceFitMaxAccel, DEFAULTS.deviceFitMaxAccel)),
+      ),
+      ...clampSauceRange(
+        num(form.deviceFitSauceMinPct, DEFAULTS.deviceFitSauceMinPct),
+        num(form.deviceFitSauceMaxPct, DEFAULTS.deviceFitSauceMaxPct),
       ),
       browseDefaultTags: form.browseDefaultTags,
       browseDefaultMode: form.browseDefaultMode,
@@ -1000,7 +1009,7 @@ export default function SettingsPage() {
                   id="deviceFitMaxSpeed"
                   name="deviceFitMaxSpeed"
                   min="1"
-                  step="500"
+                  step="1"
                   value={form.deviceFitMaxSpeed}
                   onChange={(e) => set('deviceFitMaxSpeed', e.target.value)}
                 />
@@ -1015,7 +1024,7 @@ export default function SettingsPage() {
                   id="deviceFitMaxAccel"
                   name="deviceFitMaxAccel"
                   min="1"
-                  step="10000"
+                  step="1"
                   value={form.deviceFitMaxAccel}
                   onChange={(e) => set('deviceFitMaxAccel', e.target.value)}
                 />
@@ -1023,20 +1032,37 @@ export default function SettingsPage() {
               </label>
 
               <label className="settings-row">
-                <span className="settings-label">Machine travel (steps)</span>
+                <span className="settings-label">Sauce range min %</span>
                 <input
                   type="number"
                   className="settings-number"
-                  id="deviceFitTravelSteps"
-                  name="deviceFitTravelSteps"
-                  min="1"
-                  step="100"
-                  value={form.deviceFitTravelSteps}
-                  onChange={(e) => set('deviceFitTravelSteps', e.target.value)}
+                  id="deviceFitSauceMinPct"
+                  name="deviceFitSauceMinPct"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={form.deviceFitSauceMinPct}
+                  onChange={(e) => set('deviceFitSauceMinPct', e.target.value)}
+                />
+              </label>
+
+              <label className="settings-row">
+                <span className="settings-label">Sauce range max %</span>
+                <input
+                  type="number"
+                  className="settings-number"
+                  id="deviceFitSauceMaxPct"
+                  name="deviceFitSauceMaxPct"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={form.deviceFitSauceMaxPct}
+                  onChange={(e) => set('deviceFitSauceMaxPct', e.target.value)}
                 />
                 <span className="settings-hint">
-                  Steps the Sauce app&apos;s min to max range covers (homing prints
-                  TOTAL RANGE; 5800 on the bench unit at 0 to 100%)
+                  Copy these four from the Sauce app. Its sliders are imprecise, so
+                  round speed and accel down and the range outward (min down, max
+                  up): both errors then make the fit conservative.
                 </span>
               </label>
             </section>

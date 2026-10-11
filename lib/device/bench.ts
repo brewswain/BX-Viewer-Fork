@@ -93,11 +93,11 @@ export type BenchHeader = {
   governorLevel: string
   capsHash: string
   /**
-   * The caps the plan was fitted to (`fitToMachine`), travel already scaled by
-   * the stroke range; null when fitting was off. Moves the fit dropped are
-   * counted in the `merged` column.
+   * The caps the plan was fitted to (`fitToMachine`), with the Sauce app range
+   * they came from; travel is derived from that range and the stroke range.
+   * Null when fitting was off. Moves the fit dropped are counted in `merged`.
    */
-  fit: FitOptions | null
+  fit: (FitOptions & { sauceMinPct: number; sauceMaxPct: number }) | null
 }
 
 /**
@@ -166,7 +166,7 @@ export class BenchRecorder {
       lines.push(`# governorLevel=${h.governorLevel}  capsHash=${h.capsHash}`)
       lines.push(
         h.fit
-          ? `# fit=on  maxSpeed=${h.fit.maxSpeed}  maxAccel=${h.fit.maxAccel}  travelSteps=${Math.round(h.fit.travelSteps)}`
+          ? `# fit=on  maxSpeed=${h.fit.maxSpeed}  maxAccel=${h.fit.maxAccel}  sauceMinPct=${h.fit.sauceMinPct}  sauceMaxPct=${h.fit.sauceMaxPct}  travelSteps=${Math.round(h.fit.travelSteps)}`
           : '# fit=off',
       )
       lines.push(`# rangeMin=${h.rangeMin}  rangeMax=${h.rangeMax}  invert=${h.invert}`)
