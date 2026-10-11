@@ -47,6 +47,7 @@ const header = (minCmdMs = 100) => ({
   fps: FPS,
   governorLevel: 'tame',
   capsHash: 'deadbeef',
+  fit: { maxSpeed: 20000, maxAccel: 500000, travelSteps: 5800 },
 })
 
 const entry = (over: Partial<BenchEntry> = {}): BenchEntry => ({

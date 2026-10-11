@@ -13,9 +13,12 @@ import type { Marker } from '@/lib/player/types'
 import {
   buildSegments,
   buildStrokePlan,
+  DEFAULT_FIT,
   DEFAULT_LINEARIZE,
   depthAt,
+  fitToMachine,
   linearize,
+  minMoveMs,
   seekIndex,
   type StrokeCmd,
 } from './plan'
@@ -276,5 +279,98 @@ describe('buildStrokePlan', () => {
       expect(c.t).toBeGreaterThanOrEqual(0)
       expect(c.t).toBeLessThanOrEqual(lastMarkerMs)
     }
+  })
+})
+
+/** Moves that alternate between `lo` and `hi`, one every `period` ms, back to back. */
+const zigzag = (n: number, period: number, lo = 0, hi = 1): StrokeCmd[] =>
+  Array.from({ length: n }, (_, i) => ({
+    t: i * period,
+    pos: i % 2 ? lo : hi,
+    dur: period,
+  }))
+
+const arrival = (c: StrokeCmd) => c.t + c.dur
+
+describe('fitToMachine', () => {
+  test('minMoveMs: triangle under the speed cap, trapezoid over it', () => {
+    // 800 steps reaches 20000 steps/s exactly at 500000 steps/s2.
+    expect(minMoveMs(800, 20000, 500000)).toBeCloseTo(80, 6)
+    expect(minMoveMs(200, 20000, 500000)).toBeCloseTo(40, 6)
+    expect(minMoveMs(5800, 20000, 500000)).toBeCloseTo(330, 6)
+    expect(minMoveMs(0, 20000, 500000)).toBe(0)
+  })
+
+  test('a full-range zigzag it cannot meet keeps full strokes at a lower rate', () => {
+    // A full 5800-step stroke needs 330 ms; these come every 100 ms.
+    const cmds = zigzag(40, 100)
+    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    expect(out.length).toBeLessThan(cmds.length / 3)
+    expect(out.length).toBeGreaterThan(cmds.length / 6)
+    const arrivals = new Set(cmds.map(arrival))
+    let prev = 0
+    for (const c of out) {
+      // Full amplitude, still alternating, and landing on a kept turning point.
+      expect(Math.abs(c.pos - prev)).toBe(1)
+      expect(arrivals.has(arrival(c))).toBe(true)
+      prev = c.pos
+    }
+    // Every stroke is one the machine can make, except the last few, where the
+    // script ends before a reachable turning point and they are sent as is.
+    const need = minMoveMs(5800, DEFAULT_FIT.maxSpeed, DEFAULT_FIT.maxAccel)
+    expect(out.filter((c) => c.dur >= need).length).toBeGreaterThanOrEqual(out.length - 4)
+    // Nothing lags: the plan still ends where the script ends.
+    expect(arrival(out[out.length - 1])).toBe(arrival(cmds[cmds.length - 1]))
+  })
+
+  test('counts every dropped move in merged', () => {
+    const cmds = zigzag(40, 100)
+    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    const accounted = out.reduce((s, c) => s + 1 + (c.merged ?? 0), 0)
+    // The tail that no reachable stroke fits into is kept as is, so every input
+    // move is either sent or counted.
+    expect(accounted).toBe(cmds.length)
+  })
+
+  test('keeps the bigger excursion when wiggles ride on a stroke', () => {
+    // Full strokes every 100 ms, then a half one: all too quick to make. The
+    // first reachable turning point (500 ms) is the 0.5 one; the stroke should
+    // still go to 1.
+    const cmds: StrokeCmd[] = [
+      { t: 0, pos: 1, dur: 100 },
+      { t: 100, pos: 0.0, dur: 100 },
+      { t: 200, pos: 1, dur: 100 },
+      { t: 300, pos: 0.0, dur: 100 },
+      { t: 400, pos: 0.5, dur: 100 },
+      { t: 500, pos: 0.0, dur: 100 },
+    ]
+    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    expect(out[0].pos).toBe(1)
+  })
+
+  test('a path the machine can follow comes out unchanged', () => {
+    const cmds = zigzag(20, 400)
+    expect(fitToMachine(cmds, 0, DEFAULT_FIT)).toEqual(cmds)
+    // Small fast wiggles are reachable too: 0.05 of 5800 is 290 steps, 48 ms.
+    const small = zigzag(20, 60, 0.5, 0.55)
+    expect(fitToMachine(small, 0.5, DEFAULT_FIT)).toEqual(small)
+  })
+
+  test('a lone jump it cannot make is left alone', () => {
+    const cmds: StrokeCmd[] = [
+      { t: 0, pos: 0, dur: 500 },
+      { t: 500, pos: 1, dur: 50 },
+      { t: 550, pos: 1, dur: 500 },
+    ]
+    expect(fitToMachine(cmds, 0, DEFAULT_FIT)).toEqual(cmds)
+  })
+
+  test('off is a no-op in buildStrokePlan', () => {
+    const markers: Marker[] = []
+    for (let i = 0; i < 40; i++) markers.push(m(i * 6, i % 2 ? 0 : 1))
+    const off = buildStrokePlan(markers, { ...DEFAULT_LINEARIZE, minCmdMs: 20 })
+    expect(off.commands).toEqual(linearize(off.segments, { ...DEFAULT_LINEARIZE, minCmdMs: 20 }))
+    const on = buildStrokePlan(markers, { ...DEFAULT_LINEARIZE, minCmdMs: 20 }, DEFAULT_FIT)
+    expect(on.commands.length).toBeLessThan(off.commands.length)
   })
 })

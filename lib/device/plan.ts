@@ -303,13 +303,146 @@ export function linearize(
   return out
 }
 
+// ── Fit to machine ───────────────────────────────────────────────────────────
+
+/** What the machine can do, in its own steps. */
+export type FitOptions = {
+  /** Steps/s. */
+  maxSpeed: number
+  /** Steps/s². */
+  maxAccel: number
+  /** Steps the whole 0..1 depth range spans after the stroke-range mapping. */
+  travelSteps: number
+}
+
+export const DEFAULT_FIT: FitOptions = {
+  maxSpeed: 20000,
+  maxAccel: 500000,
+  // OSSM Sauce's homed range on the bench unit (2026-10-10).
+  travelSteps: 5800,
+}
+
+/**
+ * Shortest time (ms) a trapezoidal move of `steps` takes from rest to rest.
+ * Rest to rest is the conservative case: a turning point is a stop.
+ */
+export function minMoveMs(steps: number, maxSpeed: number, maxAccel: number): number {
+  if (steps <= 0) return 0
+  const s =
+    steps < (maxSpeed * maxSpeed) / maxAccel
+      ? 2 * Math.sqrt(steps / maxAccel)
+      : steps / maxSpeed + maxSpeed / maxAccel
+  return s * 1000
+}
+
+/**
+ * How far ahead (ms) the pass may look for a stroke it can make. Matches
+ * `DEFAULT_LINEARIZE.maxCmdMs`, so a fitted stroke is never longer than the
+ * longest move linearize would emit.
+ */
+const FIT_MAX_WINDOW_MS = 1000
+
+/**
+ * Drop the wiggles the machine cannot make, keeping the strokes it can make at
+ * full length.
+ *
+ * A device given a stroke it cannot finish in time does not skip it: OSSM Sauce
+ * retargets mid-move, so in a fast passage every stroke comes out short and the
+ * whole thing reads as a buzz (2026-10-10 live session: about half of a fast
+ * script's moves were out of reach at 15000 steps/s, 500000 steps/s²). Fewer
+ * strokes at full depth feel far closer to the picture than many shallow ones.
+ *
+ * Works stroke by stroke, a stroke being the run of moves between two turning
+ * points. When the stroke from the last kept turning point to the next one is
+ * out of reach, the next turning point is dropped together with the one after
+ * it, so the direction keeps alternating, and the stroke runs to the turning
+ * point after that instead, over the combined time. Its target is the most
+ * extreme of the same-direction turning points it skipped over, when that is
+ * reachable, so a big peak followed by smaller wiggles is not traded for the
+ * wiggle. A stroke that dropping cannot help (a lone big jump, or nothing
+ * reachable within `FIT_MAX_WINDOW_MS`) is left alone, as is any stroke that is
+ * already reachable, so a path the machine can follow comes out unchanged.
+ *
+ * Arrival times of every kept turning point are untouched, so nothing lags.
+ * `start` is the depth before the first command.
+ */
+export function fitToMachine(cmds: StrokeCmd[], start: number, fit: FitOptions): StrokeCmd[] {
+  if (cmds.length < 2 || fit.travelSteps <= 0) return cmds
+  const pos = (i: number) => (i < 0 ? start : cmds[i].pos)
+  const arrive = (i: number) => cmds[i].t + cmds[i].dur
+
+  // Endpoints of monotone runs, as command indices; -1 is the start. A hold
+  // (no change) carries the previous direction, so it never makes a turn.
+  const ends: number[] = [-1]
+  let dir = 0
+  for (let i = 0; i < cmds.length; i++) {
+    const d = Math.sign(pos(i) - pos(i - 1))
+    if (d !== 0 && dir !== 0 && d !== dir) ends.push(i - 1)
+    if (d !== 0) dir = d
+  }
+  if (ends[ends.length - 1] !== cmds.length - 1) ends.push(cmds.length - 1)
+
+  const reachable = (from: number, to: number, ms: number) =>
+    minMoveMs(Math.abs(to - from) * fit.travelSteps, fit.maxSpeed, fit.maxAccel) <= ms
+
+  const out: StrokeCmd[] = []
+  let at = start
+  let e = 0
+  while (e < ends.length - 1) {
+    const k = ends[e]
+    const c = ends[e + 1]
+    const issue = cmds[k + 1].t
+    let jump = 0
+    let target = 0
+    if (!reachable(at, pos(c), arrive(c) - issue)) {
+      const sign = Math.sign(pos(c) - at)
+      let extreme = pos(c)
+      // Skipped same-direction turning points sit at ends[e+1], ends[e+3], ...
+      for (let j = e + 3; j < ends.length; j += 2) {
+        const cand = ends[j]
+        const window = arrive(cand) - issue
+        if (window > FIT_MAX_WINDOW_MS) break
+        // The extreme is only worth it if it is reachable; otherwise settle for
+        // the turning point that actually sits at this time.
+        if (sign * (pos(cand) - extreme) >= 0) extreme = pos(cand)
+        const pick = reachable(at, extreme, window)
+          ? extreme
+          : reachable(at, pos(cand), window)
+            ? pos(cand)
+            : null
+        if (pick !== null) {
+          jump = j
+          target = pick
+          break
+        }
+      }
+    }
+    if (jump) {
+      const last = ends[jump]
+      let merged = 0
+      for (let i = k + 1; i <= last; i++) merged += 1 + (cmds[i].merged ?? 0)
+      out.push({ t: issue, pos: target, dur: arrive(last) - issue, merged: merged - 1 })
+      at = target
+      e = jump
+    } else {
+      for (let i = k + 1; i <= c; i++) out.push(cmds[i])
+      at = pos(c)
+      e += 1
+    }
+  }
+  return out
+}
+
 /** Convenience: markers straight through to a rate-limited command list. */
 export function buildStrokePlan(
   sortedMarkers: Marker[],
   opts: LinearizeOptions = DEFAULT_LINEARIZE,
+  fit?: FitOptions,
 ): { segments: Segment[]; commands: StrokeCmd[] } {
   const segments = buildSegments(sortedMarkers)
-  return { segments, commands: linearize(segments, opts) }
+  const commands = linearize(segments, opts)
+  if (!fit || segments.length === 0) return { segments, commands }
+  return { segments, commands: fitToMachine(commands, segments[0].from, fit) }
 }
 
 /**

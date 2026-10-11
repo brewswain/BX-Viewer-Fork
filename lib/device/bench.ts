@@ -38,6 +38,7 @@
  */
 
 import { FPS } from '@/lib/player/constants'
+import type { FitOptions } from './plan'
 
 /**
  * Why a move was issued. `anchor` is the post-seek correction and `retract` the
@@ -91,6 +92,12 @@ export type BenchHeader = {
    */
   governorLevel: string
   capsHash: string
+  /**
+   * The caps the plan was fitted to (`fitToMachine`), travel already scaled by
+   * the stroke range; null when fitting was off. Moves the fit dropped are
+   * counted in the `merged` column.
+   */
+  fit: FitOptions | null
 }
 
 /**
@@ -157,6 +164,11 @@ export class BenchRecorder {
       lines.push(`# startedAt=${h.startedAt}`)
       lines.push(`# minCmdMs=${h.minCmdMs}  leadMs=${h.leadMs}  offsetMs=${h.offsetMs}`)
       lines.push(`# governorLevel=${h.governorLevel}  capsHash=${h.capsHash}`)
+      lines.push(
+        h.fit
+          ? `# fit=on  maxSpeed=${h.fit.maxSpeed}  maxAccel=${h.fit.maxAccel}  travelSteps=${Math.round(h.fit.travelSteps)}`
+          : '# fit=off',
+      )
       lines.push(`# rangeMin=${h.rangeMin}  rangeMax=${h.rangeMax}  invert=${h.invert}`)
       lines.push(`# backend=${h.backend}  planCommands=${h.planCommands}  fps=${h.fps}`)
       lines.push(`# label=${h.label}`)

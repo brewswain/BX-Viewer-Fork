@@ -13,7 +13,7 @@
  * when something a human would notice actually changes.
  */
 
-import { buildStrokePlan, DEFAULT_LINEARIZE } from './plan'
+import { buildStrokePlan, DEFAULT_FIT, DEFAULT_LINEARIZE, type FitOptions } from './plan'
 import { EMPTY_PLAN, StrokeDriver, type StrokePlan } from './driver'
 import { BenchRecorder } from './bench'
 import { FPS } from '@/lib/player/constants'
@@ -49,6 +49,30 @@ export type DeviceConfig = {
    * for transports (or bridges) that cannot keep up.
    */
   minCmdMs: number
+  /**
+   * Drop the wiggles the machine cannot make in time (`fitToMachine`), judged
+   * against the caps below, so fast passages keep full-length strokes.
+   */
+  fitEnabled: boolean
+  /** Steps/s, the speed the Sauce app is set to. */
+  fitMaxSpeed: number
+  /** Steps/s², the accel the Sauce app is set to. */
+  fitMaxAccel: number
+  /** Steps the machine's homed range spans; the stroke range is applied on top. */
+  fitTravelSteps: number
+}
+
+/** Config keys that change the plan rather than just the next command. */
+const PLAN_KEYS = ['minCmdMs', 'fitEnabled', 'fitMaxSpeed', 'fitMaxAccel', 'fitTravelSteps'] as const
+
+/** The fit the plan is built with, or undefined when fitting is off. */
+export function fitFor(c: DeviceConfig): FitOptions | undefined {
+  if (!c.fitEnabled) return undefined
+  return {
+    maxSpeed: c.fitMaxSpeed,
+    maxAccel: c.fitMaxAccel,
+    travelSteps: c.fitTravelSteps * Math.abs(c.rangeMax - c.rangeMin),
+  }
 }
 
 export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
@@ -63,6 +87,10 @@ export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
   invert: false,
   offsetMs: 0,
   minCmdMs: DEFAULT_LINEARIZE.minCmdMs,
+  fitEnabled: true,
+  fitMaxSpeed: DEFAULT_FIT.maxSpeed,
+  fitMaxAccel: DEFAULT_FIT.maxAccel,
+  fitTravelSteps: DEFAULT_FIT.travelSteps,
 }
 
 /**
@@ -184,13 +212,21 @@ class DeviceManager {
       this.disconnect()
     }
 
-    if (prev.minCmdMs !== config.minCmdMs) {
+    // The fit judges strokes in steps, so with it on the stroke range changes the
+    // plan too.
+    const fitRangeChanged =
+      config.fitEnabled &&
+      (prev.rangeMin !== config.rangeMin || prev.rangeMax !== config.rangeMax)
+    const changed = PLAN_KEYS.filter((k) => prev[k] !== config[k])
+    if (changed.length > 0 || fitRangeChanged) {
       // Logged unconditionally, because the bench runs segments 4, 5 and 7 twice
       // at 100 and at 20 and a run whose threshold is not written down anywhere
       // is not readable afterwards. A change mid-recording also invalidates the
       // header the log was armed with, so the recording stops rather than
       // silently describing a plan that no longer exists.
-      this.addLog(`minCmdMs ${prev.minCmdMs} -> ${config.minCmdMs}, replanning`)
+      const what = changed.map((k) => `${k} ${prev[k]} -> ${config[k]}`)
+      if (fitRangeChanged) what.push('stroke range (fit)')
+      this.addLog(`${what.join(', ')}, replanning`)
       if (this.state.recording) {
         this.addLog('Bench recording stopped: the plan it was recording has been rebuilt')
         this.stopBench()
@@ -291,10 +327,11 @@ class DeviceManager {
       this.updateArmed()
       return
     }
-    const plan: StrokePlan = buildStrokePlan(this.markers, {
-      ...DEFAULT_LINEARIZE,
-      minCmdMs: this.state.config.minCmdMs,
-    })
+    const plan: StrokePlan = buildStrokePlan(
+      this.markers,
+      { ...DEFAULT_LINEARIZE, minCmdMs: this.state.config.minCmdMs },
+      fitFor(this.state.config),
+    )
     if (swap) this.driver.swapPlan(plan)
     else this.driver.setPlan(plan)
     this.patch({ planCommands: plan.commands.length })
@@ -356,6 +393,7 @@ class DeviceManager {
       fps: FPS,
       governorLevel: this.governor.governorLevel,
       capsHash: this.governor.capsHash,
+      fit: fitFor(c) ?? null,
     })
     this.driver.setRecorder(this.recorder)
     this.addLog(`Bench recording armed at minCmdMs=${c.minCmdMs}`)

@@ -80,6 +80,10 @@ export type Settings = {
   deviceInvert: boolean
   deviceOffsetMs: number
   deviceMinCmdMs: number
+  deviceFitEnabled: boolean
+  deviceFitMaxSpeed: number
+  deviceFitMaxAccel: number
+  deviceFitTravelSteps: number
   /**
    * Base URL of the OSSM Sauce app for the *export* route (`lib/ossm/app.ts`).
    * Empty means "guess from this page's hostname, port 8081", which is right
@@ -140,6 +144,10 @@ export const DEFAULTS: Settings = {
   deviceInvert: false,
   deviceOffsetMs: 0,
   deviceMinCmdMs: 100,
+  deviceFitEnabled: true,
+  deviceFitMaxSpeed: 20000,
+  deviceFitMaxAccel: 500000,
+  deviceFitTravelSteps: 5800,
   ossmAppUrl: '',
   // The T&S-style BX Studio videos are the best synthesized ones so far.
   browseDefaultTags: ['thingsnstuff style'],
@@ -182,5 +190,9 @@ export function deviceConfigFromSettings(s: Settings) {
     invert: s.deviceInvert,
     offsetMs: s.deviceOffsetMs,
     minCmdMs: s.deviceMinCmdMs,
+    fitEnabled: s.deviceFitEnabled,
+    fitMaxSpeed: s.deviceFitMaxSpeed,
+    fitMaxAccel: s.deviceFitMaxAccel,
+    fitTravelSteps: s.deviceFitTravelSteps,
   }
 }

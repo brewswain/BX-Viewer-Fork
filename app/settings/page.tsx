@@ -69,6 +69,10 @@ type FormState = {
   deviceRangeMax: string
   deviceOffsetMs: string
   deviceMinCmdMs: string
+  deviceFitEnabled: boolean
+  deviceFitMaxSpeed: string
+  deviceFitMaxAccel: string
+  deviceFitTravelSteps: string
   browseDefaultTags: string[]
   browseDefaultMode: MatchMode
 }
@@ -126,6 +130,10 @@ function toForm(s: Settings): FormState {
     deviceRangeMax: String(Math.round(s.deviceRangeMax * 100)),
     deviceOffsetMs: String(s.deviceOffsetMs),
     deviceMinCmdMs: String(s.deviceMinCmdMs),
+    deviceFitEnabled: s.deviceFitEnabled !== false,
+    deviceFitMaxSpeed: String(s.deviceFitMaxSpeed),
+    deviceFitMaxAccel: String(s.deviceFitMaxAccel),
+    deviceFitTravelSteps: String(s.deviceFitTravelSteps),
     browseDefaultTags: Array.isArray(s.browseDefaultTags) ? s.browseDefaultTags : [],
     browseDefaultMode: isMatchMode(s.browseDefaultMode) ? s.browseDefaultMode : 'or',
   }
@@ -200,6 +208,13 @@ export default function SettingsPage() {
       deviceRangeMax: clamp01(num(form.deviceRangeMax, 100) / 100),
       deviceOffsetMs: num(form.deviceOffsetMs, 0),
       deviceMinCmdMs: Math.max(20, num(form.deviceMinCmdMs, DEFAULTS.deviceMinCmdMs)),
+      deviceFitEnabled: form.deviceFitEnabled,
+      deviceFitMaxSpeed: Math.max(1, num(form.deviceFitMaxSpeed, DEFAULTS.deviceFitMaxSpeed)),
+      deviceFitMaxAccel: Math.max(1, num(form.deviceFitMaxAccel, DEFAULTS.deviceFitMaxAccel)),
+      deviceFitTravelSteps: Math.max(
+        1,
+        num(form.deviceFitTravelSteps, DEFAULTS.deviceFitTravelSteps),
+      ),
       browseDefaultTags: form.browseDefaultTags,
       browseDefaultMode: form.browseDefaultMode,
     })
@@ -960,6 +975,68 @@ export default function SettingsPage() {
                 <span className="settings-hint">
                   Commands closer together than this are merged. Raise it if the
                   device stutters or falls behind on dense paths.
+                </span>
+              </label>
+
+              <label className="settings-check">
+                <input
+                  type="checkbox"
+                  id="deviceFitEnabled"
+                  name="deviceFitEnabled"
+                  checked={form.deviceFitEnabled}
+                  onChange={(e) => set('deviceFitEnabled', e.target.checked)}
+                />
+                <span>
+                  Fit to machine: skip wiggles the machine cannot make in time, so
+                  fast passages keep full-length strokes
+                </span>
+              </label>
+
+              <label className="settings-row">
+                <span className="settings-label">Machine max speed (steps/s)</span>
+                <input
+                  type="number"
+                  className="settings-number"
+                  id="deviceFitMaxSpeed"
+                  name="deviceFitMaxSpeed"
+                  min="1"
+                  step="500"
+                  value={form.deviceFitMaxSpeed}
+                  onChange={(e) => set('deviceFitMaxSpeed', e.target.value)}
+                />
+                <span className="settings-hint">Match the speed set in the Sauce app</span>
+              </label>
+
+              <label className="settings-row">
+                <span className="settings-label">Machine max accel (steps/s²)</span>
+                <input
+                  type="number"
+                  className="settings-number"
+                  id="deviceFitMaxAccel"
+                  name="deviceFitMaxAccel"
+                  min="1"
+                  step="10000"
+                  value={form.deviceFitMaxAccel}
+                  onChange={(e) => set('deviceFitMaxAccel', e.target.value)}
+                />
+                <span className="settings-hint">Match the acceleration set in the Sauce app</span>
+              </label>
+
+              <label className="settings-row">
+                <span className="settings-label">Machine travel (steps)</span>
+                <input
+                  type="number"
+                  className="settings-number"
+                  id="deviceFitTravelSteps"
+                  name="deviceFitTravelSteps"
+                  min="1"
+                  step="100"
+                  value={form.deviceFitTravelSteps}
+                  onChange={(e) => set('deviceFitTravelSteps', e.target.value)}
+                />
+                <span className="settings-hint">
+                  Steps the Sauce app&apos;s min to max range covers (homing prints
+                  TOTAL RANGE; 5800 on the bench unit at 0 to 100%)
                 </span>
               </label>
             </section>
