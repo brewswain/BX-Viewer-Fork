@@ -18,6 +18,7 @@ import {
   depthAt,
   fitToMachine,
   linearize,
+  maxMoveSteps,
   minMoveMs,
   SAUCE_HOMED_STEPS,
   sauceTravelSteps,
@@ -293,8 +294,9 @@ const zigzag = (n: number, period: number, lo = 0, hi = 1): StrokeCmd[] =>
   }))
 
 const arrival = (c: StrokeCmd) => c.t + c.dur
+const DROP = { ...DEFAULT_FIT, mode: 'drop' as const }
 
-describe('fitToMachine', () => {
+describe('fitToMachine (drop)', () => {
   test('sauceTravelSteps: the Sauce app range as a share of the homed steps', () => {
     expect(sauceTravelSteps(0, 100)).toBe(SAUCE_HOMED_STEPS)
     expect(sauceTravelSteps(0, 58.3)).toBeCloseTo(3381.4, 6)
@@ -305,8 +307,8 @@ describe('fitToMachine', () => {
   test('a narrower Sauce range makes the same script reachable', () => {
     // A full stroke needs 330 ms at 0..100%; at 0..20% it is 1160 steps, 98 ms.
     const cmds = zigzag(20, 120)
-    expect(fitToMachine(cmds, 0, DEFAULT_FIT).length).toBeLessThan(cmds.length)
-    const narrow = { ...DEFAULT_FIT, travelSteps: sauceTravelSteps(0, 20) }
+    expect(fitToMachine(cmds, 0, DROP).length).toBeLessThan(cmds.length)
+    const narrow = { ...DROP, travelSteps: sauceTravelSteps(0, 20) }
     expect(fitToMachine(cmds, 0, narrow)).toEqual(cmds)
   })
 
@@ -321,7 +323,7 @@ describe('fitToMachine', () => {
   test('a full-range zigzag it cannot meet keeps full strokes at a lower rate', () => {
     // A full 5800-step stroke needs 330 ms; these come every 100 ms.
     const cmds = zigzag(40, 100)
-    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    const out = fitToMachine(cmds, 0, DROP)
     expect(out.length).toBeLessThan(cmds.length / 3)
     expect(out.length).toBeGreaterThan(cmds.length / 6)
     const arrivals = new Set(cmds.map(arrival))
@@ -342,7 +344,7 @@ describe('fitToMachine', () => {
 
   test('counts every dropped move in merged', () => {
     const cmds = zigzag(40, 100)
-    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    const out = fitToMachine(cmds, 0, DROP)
     const accounted = out.reduce((s, c) => s + 1 + (c.merged ?? 0), 0)
     // The tail that no reachable stroke fits into is kept as is, so every input
     // move is either sent or counted.
@@ -361,16 +363,16 @@ describe('fitToMachine', () => {
       { t: 400, pos: 0.5, dur: 100 },
       { t: 500, pos: 0.0, dur: 100 },
     ]
-    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    const out = fitToMachine(cmds, 0, DROP)
     expect(out[0].pos).toBe(1)
   })
 
   test('a path the machine can follow comes out unchanged', () => {
     const cmds = zigzag(20, 400)
-    expect(fitToMachine(cmds, 0, DEFAULT_FIT)).toEqual(cmds)
+    expect(fitToMachine(cmds, 0, DROP)).toEqual(cmds)
     // Small fast wiggles are reachable too: 0.05 of 5800 is 290 steps, 48 ms.
     const small = zigzag(20, 60, 0.5, 0.55)
-    expect(fitToMachine(small, 0.5, DEFAULT_FIT)).toEqual(small)
+    expect(fitToMachine(small, 0.5, DROP)).toEqual(small)
   })
 
   test('a lone jump it cannot make is left alone', () => {
@@ -379,7 +381,7 @@ describe('fitToMachine', () => {
       { t: 500, pos: 1, dur: 50 },
       { t: 550, pos: 1, dur: 500 },
     ]
-    expect(fitToMachine(cmds, 0, DEFAULT_FIT)).toEqual(cmds)
+    expect(fitToMachine(cmds, 0, DROP)).toEqual(cmds)
   })
 
   test('off is a no-op in buildStrokePlan', () => {
@@ -387,7 +389,76 @@ describe('fitToMachine', () => {
     for (let i = 0; i < 40; i++) markers.push(m(i * 6, i % 2 ? 0 : 1))
     const off = buildStrokePlan(markers, { ...DEFAULT_LINEARIZE, minCmdMs: 20 })
     expect(off.commands).toEqual(linearize(off.segments, { ...DEFAULT_LINEARIZE, minCmdMs: 20 }))
-    const on = buildStrokePlan(markers, { ...DEFAULT_LINEARIZE, minCmdMs: 20 }, DEFAULT_FIT)
+    const on = buildStrokePlan(markers, { ...DEFAULT_LINEARIZE, minCmdMs: 20 }, DROP)
     expect(on.commands.length).toBeLessThan(off.commands.length)
+  })
+})
+
+describe('fitToMachine (shrink)', () => {
+  const { maxSpeed: v, maxAccel: a } = DEFAULT_FIT
+
+  test('is the default mode', () => {
+    expect(DEFAULT_FIT.mode).toBe('shrink')
+  })
+
+  test('maxMoveSteps inverts minMoveMs on both sides of the speed cap', () => {
+    for (const steps of [100, 800, 3000, 5800]) {
+      expect(maxMoveSteps(minMoveMs(steps, v, a), v, a)).toBeCloseTo(steps, 6)
+    }
+    expect(maxMoveSteps(0, v, a)).toBe(0)
+  })
+
+  test('a full-range zigzag it cannot meet keeps every stroke, shallower', () => {
+    const cmds = zigzag(40, 100)
+    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    expect(out.length).toBe(cmds.length)
+    // 100 ms reaches 1200 steps at 20000 / 500000: the zigzag settles at 0..that.
+    const reach = maxMoveSteps(100, v, a) / SAUCE_HOMED_STEPS
+    out.forEach((c, i) => {
+      expect(c.t).toBe(cmds[i].t)
+      expect(c.dur).toBe(cmds[i].dur)
+      expect(c.pos).toBeCloseTo(i % 2 ? 0 : reach, 9)
+    })
+  })
+
+  test('every stroke it sends is one the machine can make', () => {
+    // Uneven script: fast and slow strokes of mixed size.
+    const cmds: StrokeCmd[] = []
+    let t = 0
+    for (let i = 0; i < 60; i++) {
+      const dur = [60, 90, 250, 120][i % 4]
+      cmds.push({ t, pos: i % 2 ? 0.1 * (i % 3) : 0.6 + 0.4 * ((i % 5) / 4), dur })
+      t += dur
+    }
+    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    let at = 0
+    for (const c of out) {
+      const need = minMoveMs(Math.abs(c.pos - at) * SAUCE_HOMED_STEPS, v, a)
+      expect(need).toBeLessThanOrEqual(c.dur + 1e-6)
+      expect(c.pos).toBeGreaterThanOrEqual(0)
+      expect(c.pos).toBeLessThanOrEqual(1)
+      at = c.pos
+    }
+  })
+
+  test('moves inside a stroke are rescaled onto the shortened stroke', () => {
+    // One 0..1 stroke in two halves, 50 ms each, then back: too quick for a full one.
+    const cmds: StrokeCmd[] = [
+      { t: 0, pos: 0.5, dur: 50 },
+      { t: 50, pos: 1, dur: 50 },
+      { t: 100, pos: 0, dur: 100 },
+    ]
+    const out = fitToMachine(cmds, 0, DEFAULT_FIT)
+    const reach = maxMoveSteps(100, v, a) / SAUCE_HOMED_STEPS
+    expect(out[1].pos).toBeCloseTo(reach, 9)
+    expect(out[0].pos).toBeCloseTo(reach / 2, 9)
+    expect(out[2].pos).toBe(0)
+  })
+
+  test('a path the machine can follow comes out unchanged', () => {
+    const cmds = zigzag(20, 400)
+    expect(fitToMachine(cmds, 0, DEFAULT_FIT)).toEqual(cmds)
+    const small = zigzag(20, 60, 0.5, 0.55)
+    expect(fitToMachine(small, 0.5, DEFAULT_FIT)).toEqual(small)
   })
 })

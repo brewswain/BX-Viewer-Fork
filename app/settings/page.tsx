@@ -71,6 +71,7 @@ type FormState = {
   deviceOffsetMs: string
   deviceMinCmdMs: string
   deviceFitEnabled: boolean
+  deviceFitMode: 'shrink' | 'drop'
   deviceFitMaxSpeed: string
   deviceFitMaxAccel: string
   deviceFitSauceMinPct: string
@@ -133,6 +134,7 @@ function toForm(s: Settings): FormState {
     deviceOffsetMs: String(s.deviceOffsetMs),
     deviceMinCmdMs: String(s.deviceMinCmdMs),
     deviceFitEnabled: s.deviceFitEnabled !== false,
+    deviceFitMode: s.deviceFitMode === 'drop' ? 'drop' : 'shrink',
     deviceFitMaxSpeed: String(s.deviceFitMaxSpeed),
     deviceFitMaxAccel: String(s.deviceFitMaxAccel),
     deviceFitSauceMinPct: String(s.deviceFitSauceMinPct),
@@ -212,6 +214,7 @@ export default function SettingsPage() {
       deviceOffsetMs: num(form.deviceOffsetMs, 0),
       deviceMinCmdMs: Math.max(20, num(form.deviceMinCmdMs, DEFAULTS.deviceMinCmdMs)),
       deviceFitEnabled: form.deviceFitEnabled,
+      deviceFitMode: form.deviceFitMode,
       deviceFitMaxSpeed: Math.max(
         1,
         Math.floor(num(form.deviceFitMaxSpeed, DEFAULTS.deviceFitMaxSpeed)),
@@ -996,9 +999,23 @@ export default function SettingsPage() {
                   onChange={(e) => set('deviceFitEnabled', e.target.checked)}
                 />
                 <span>
-                  Fit to machine: skip wiggles the machine cannot make in time, so
-                  fast passages keep full-length strokes
+                  Fit to machine: adjust strokes the machine cannot make in time,
+                  judged against the caps below
                 </span>
+              </label>
+
+              <label className="settings-row">
+                <span className="settings-label">Fit mode</span>
+                <select
+                  className="settings-select"
+                  id="deviceFitMode"
+                  name="deviceFitMode"
+                  value={form.deviceFitMode}
+                  onChange={(e) => set('deviceFitMode', e.target.value as 'shrink' | 'drop')}
+                >
+                  <option value="shrink">Shrink: keep every stroke, shallower when fast</option>
+                  <option value="drop">Drop: fewer strokes, full length</option>
+                </select>
               </label>
 
               <label className="settings-row">

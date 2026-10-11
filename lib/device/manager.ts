@@ -17,6 +17,7 @@ import {
   buildStrokePlan,
   DEFAULT_FIT,
   DEFAULT_LINEARIZE,
+  type FitMode,
   type FitOptions,
   sauceTravelSteps,
 } from './plan'
@@ -56,10 +57,11 @@ export type DeviceConfig = {
    */
   minCmdMs: number
   /**
-   * Drop the wiggles the machine cannot make in time (`fitToMachine`), judged
-   * against the caps below, so fast passages keep full-length strokes.
+   * Fit strokes the machine cannot make in time (`fitToMachine`), judged
+   * against the caps below: shrink them or drop them, per `fitMode`.
    */
   fitEnabled: boolean
+  fitMode: FitMode
   /** Steps/s, the speed the Sauce app is set to. */
   fitMaxSpeed: number
   /** Steps/s², the accel the Sauce app is set to. */
@@ -76,6 +78,7 @@ export type DeviceConfig = {
 const PLAN_KEYS = [
   'minCmdMs',
   'fitEnabled',
+  'fitMode',
   'fitMaxSpeed',
   'fitMaxAccel',
   'fitSauceMinPct',
@@ -90,6 +93,7 @@ export function fitFor(c: DeviceConfig): FitOptions | undefined {
     maxAccel: c.fitMaxAccel,
     travelSteps:
       sauceTravelSteps(c.fitSauceMinPct, c.fitSauceMaxPct) * Math.abs(c.rangeMax - c.rangeMin),
+    mode: c.fitMode,
   }
 }
 
@@ -106,6 +110,7 @@ export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
   offsetMs: 0,
   minCmdMs: DEFAULT_LINEARIZE.minCmdMs,
   fitEnabled: true,
+  fitMode: DEFAULT_FIT.mode,
   fitMaxSpeed: DEFAULT_FIT.maxSpeed,
   fitMaxAccel: DEFAULT_FIT.maxAccel,
   fitSauceMinPct: 0,

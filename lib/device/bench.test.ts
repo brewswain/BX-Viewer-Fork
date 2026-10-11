@@ -47,7 +47,14 @@ const header = (minCmdMs = 100) => ({
   fps: FPS,
   governorLevel: 'tame',
   capsHash: 'deadbeef',
-  fit: { maxSpeed: 20113, maxAccel: 500000, travelSteps: 3381.4, sauceMinPct: 0, sauceMaxPct: 58.3 },
+  fit: {
+    maxSpeed: 20113,
+    maxAccel: 500000,
+    travelSteps: 3381.4,
+    mode: 'shrink',
+    sauceMinPct: 0,
+    sauceMaxPct: 58.3,
+  },
 })
 
 const entry = (over: Partial<BenchEntry> = {}): BenchEntry => ({
@@ -101,7 +108,7 @@ describe('BenchRecorder', () => {
     const r = new BenchRecorder()
     r.arm(header())
     expect(r.toCsv()).toContain(
-      '# fit=on  maxSpeed=20113  maxAccel=500000  sauceMinPct=0  sauceMaxPct=58.3  travelSteps=3381',
+      '# fit=shrink  maxSpeed=20113  maxAccel=500000  sauceMinPct=0  sauceMaxPct=58.3  travelSteps=3381',
     )
     r.arm({ ...header(), fit: null })
     expect(r.toCsv()).toContain('# fit=off')

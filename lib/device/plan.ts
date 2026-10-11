@@ -313,7 +313,15 @@ export type FitOptions = {
   maxAccel: number
   /** Steps the whole 0..1 depth range spans after the stroke-range mapping. */
   travelSteps: number
+  /**
+   * What to do with a stroke the machine cannot make in time: `shrink` it to
+   * the length it can make (keeps every stroke and the rhythm), or `drop` the
+   * wiggle so the strokes around it stay full length (fewer, deeper strokes).
+   */
+  mode: FitMode
 }
+
+export type FitMode = 'shrink' | 'drop'
 
 /**
  * Steps OSSM Sauce's homed range spans (homing's TOTAL RANGE on the bench unit,
@@ -332,6 +340,9 @@ export const DEFAULT_FIT: FitOptions = {
   maxSpeed: 20000,
   maxAccel: 500000,
   travelSteps: SAUCE_HOMED_STEPS,
+  // 2026-10-10 live session: dropping wiggles read as far fewer strokes than
+  // expected; keeping the rhythm with shallower strokes felt better.
+  mode: 'shrink',
 }
 
 /**
@@ -347,6 +358,32 @@ export function minMoveMs(steps: number, maxSpeed: number, maxAccel: number): nu
   return s * 1000
 }
 
+/** Longest trapezoidal move (steps) from rest to rest in `ms`; inverse of `minMoveMs`. */
+export function maxMoveSteps(ms: number, maxSpeed: number, maxAccel: number): number {
+  if (ms <= 0) return 0
+  const s = ms / 1000
+  return s <= (2 * maxSpeed) / maxAccel
+    ? (maxAccel * s * s) / 4
+    : maxSpeed * (s - maxSpeed / maxAccel)
+}
+
+/**
+ * Endpoints of monotone runs, as command indices; -1 is the start. A hold (no
+ * change) carries the previous direction, so it never makes a turn.
+ */
+function runEnds(cmds: StrokeCmd[], start: number): number[] {
+  const pos = (i: number) => (i < 0 ? start : cmds[i].pos)
+  const ends: number[] = [-1]
+  let dir = 0
+  for (let i = 0; i < cmds.length; i++) {
+    const d = Math.sign(pos(i) - pos(i - 1))
+    if (d !== 0 && dir !== 0 && d !== dir) ends.push(i - 1)
+    if (d !== 0) dir = d
+  }
+  if (ends[ends.length - 1] !== cmds.length - 1) ends.push(cmds.length - 1)
+  return ends
+}
+
 /**
  * How far ahead (ms) the pass may look for a stroke it can make. Matches
  * `DEFAULT_LINEARIZE.maxCmdMs`, so a fitted stroke is never longer than the
@@ -355,14 +392,62 @@ export function minMoveMs(steps: number, maxSpeed: number, maxAccel: number): nu
 const FIT_MAX_WINDOW_MS = 1000
 
 /**
- * Drop the wiggles the machine cannot make, keeping the strokes it can make at
- * full length.
+ * Make the plan something the machine can follow, per `fit.mode`.
  *
  * A device given a stroke it cannot finish in time does not skip it: OSSM Sauce
- * retargets mid-move, so in a fast passage every stroke comes out short and the
- * whole thing reads as a buzz (2026-10-10 live session: about half of a fast
- * script's moves were out of reach at 15000 steps/s, 500000 steps/s²). Fewer
- * strokes at full depth feel far closer to the picture than many shallow ones.
+ * retargets mid-move, so in a fast passage strokes come out short and ragged
+ * (2026-10-10 live session: about half of a fast script's moves were out of
+ * reach at 15000 steps/s, 500000 steps/s²). A path the machine can follow
+ * comes out unchanged in either mode. `start` is the depth before the first
+ * command.
+ */
+export function fitToMachine(cmds: StrokeCmd[], start: number, fit: FitOptions): StrokeCmd[] {
+  if (cmds.length < 2 || fit.travelSteps <= 0) return cmds
+  return fit.mode === 'drop' ? dropToMachine(cmds, start, fit) : shrinkToMachine(cmds, start, fit)
+}
+
+/**
+ * Shorten each stroke the machine cannot make in time to the length it can,
+ * keeping every stroke and every arrival time, so the rhythm survives at the
+ * cost of depth.
+ *
+ * A short stroke stops early on its own side, so the stroke back from it is
+ * shorter too: a too-fast 0..1 zigzag settles at 0..x around the start, i.e.
+ * shallower rather than recentred. The moves inside a stroke are rescaled onto
+ * the shortened stroke, so their shape is kept. Sending the shortened stroke
+ * beats letting Sauce retarget mid-move: the machine gets to stop and turn
+ * where the plan says, instead of being yanked around at speed.
+ */
+function shrinkToMachine(cmds: StrokeCmd[], start: number, fit: FitOptions): StrokeCmd[] {
+  const pos = (i: number) => (i < 0 ? start : cmds[i].pos)
+  const arrive = (i: number) => cmds[i].t + cmds[i].dur
+  const ends = runEnds(cmds, start)
+
+  const out: StrokeCmd[] = []
+  let at = start
+  for (let e = 0; e < ends.length - 1; e++) {
+    const k = ends[e]
+    const c = ends[e + 1]
+    const from = pos(k)
+    const want = pos(c) - from
+    const reach =
+      maxMoveSteps(arrive(c) - cmds[k + 1].t, fit.maxSpeed, fit.maxAccel) / fit.travelSteps
+    const gap = pos(c) - at
+    const target = Math.abs(gap) <= reach ? pos(c) : at + Math.sign(gap) * reach
+    if (want === 0 || (at === from && target === pos(c))) {
+      for (let i = k + 1; i <= c; i++) out.push(cmds[i])
+    } else {
+      const scale = (target - at) / want
+      for (let i = k + 1; i <= c; i++) out.push({ ...cmds[i], pos: at + (cmds[i].pos - from) * scale })
+    }
+    at = want === 0 ? at : target
+  }
+  return out
+}
+
+/**
+ * Drop the wiggles the machine cannot make, keeping the strokes it can make at
+ * full length: fewer strokes, at full depth.
  *
  * Works stroke by stroke, a stroke being the run of moves between two turning
  * points. When the stroke from the last kept turning point to the next one is
@@ -373,26 +458,12 @@ const FIT_MAX_WINDOW_MS = 1000
  * reachable, so a big peak followed by smaller wiggles is not traded for the
  * wiggle. A stroke that dropping cannot help (a lone big jump, or nothing
  * reachable within `FIT_MAX_WINDOW_MS`) is left alone, as is any stroke that is
- * already reachable, so a path the machine can follow comes out unchanged.
- *
- * Arrival times of every kept turning point are untouched, so nothing lags.
- * `start` is the depth before the first command.
+ * already reachable. Arrival times of every kept turning point are untouched.
  */
-export function fitToMachine(cmds: StrokeCmd[], start: number, fit: FitOptions): StrokeCmd[] {
-  if (cmds.length < 2 || fit.travelSteps <= 0) return cmds
+function dropToMachine(cmds: StrokeCmd[], start: number, fit: FitOptions): StrokeCmd[] {
   const pos = (i: number) => (i < 0 ? start : cmds[i].pos)
   const arrive = (i: number) => cmds[i].t + cmds[i].dur
-
-  // Endpoints of monotone runs, as command indices; -1 is the start. A hold
-  // (no change) carries the previous direction, so it never makes a turn.
-  const ends: number[] = [-1]
-  let dir = 0
-  for (let i = 0; i < cmds.length; i++) {
-    const d = Math.sign(pos(i) - pos(i - 1))
-    if (d !== 0 && dir !== 0 && d !== dir) ends.push(i - 1)
-    if (d !== 0) dir = d
-  }
-  if (ends[ends.length - 1] !== cmds.length - 1) ends.push(cmds.length - 1)
+  const ends = runEnds(cmds, start)
 
   const reachable = (from: number, to: number, ms: number) =>
     minMoveMs(Math.abs(to - from) * fit.travelSteps, fit.maxSpeed, fit.maxAccel) <= ms

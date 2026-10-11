@@ -81,6 +81,7 @@ export type Settings = {
   deviceOffsetMs: number
   deviceMinCmdMs: number
   deviceFitEnabled: boolean
+  deviceFitMode: 'shrink' | 'drop'
   deviceFitMaxSpeed: number
   deviceFitMaxAccel: number
   /** The Sauce app's range sliders, percent of the homed range. */
@@ -147,6 +148,7 @@ export const DEFAULTS: Settings = {
   deviceOffsetMs: 0,
   deviceMinCmdMs: 100,
   deviceFitEnabled: true,
+  deviceFitMode: 'shrink',
   deviceFitMaxSpeed: 20000,
   deviceFitMaxAccel: 500000,
   deviceFitSauceMinPct: 0,
@@ -213,6 +215,7 @@ export function deviceConfigFromSettings(s: Settings) {
     offsetMs: s.deviceOffsetMs,
     minCmdMs: s.deviceMinCmdMs,
     fitEnabled: s.deviceFitEnabled,
+    fitMode: s.deviceFitMode === 'drop' ? ('drop' as const) : ('shrink' as const),
     fitMaxSpeed: s.deviceFitMaxSpeed,
     fitMaxAccel: s.deviceFitMaxAccel,
     fitSauceMinPct: s.deviceFitSauceMinPct,
