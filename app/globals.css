@@ -676,9 +676,13 @@ body {
 }
 
 /* ── PLAYER PAGE ── */
+/* `minmax(0, …)`, not a bare `1fr`: a bare track can't shrink below its
+   content's min-content width, and the <video> reports its intrinsic 1920px.
+   The column then overflows the layout and shoves the sidebar off screen, and
+   the .bx canvas resizes to the wider wrap, which holds it there. */
 .player-layout {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 2rem;
   max-width: 1400px;
   margin: 0 auto;
@@ -687,7 +691,7 @@ body {
 
 @media (max-width: 1100px) {
   .player-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
